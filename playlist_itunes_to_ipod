@@ -1,0 +1,22 @@
+#!/bin/bash
+
+dirA="$1"
+
+if [ -z "$dirA" ]; then
+  echo "Usage: $(basename $0) <directory>" >&2
+  exit 1
+fi
+
+if [ ! -d "$dirA" ]; then
+  echo "Error: directory must exist" >&2
+  exit 1
+fi
+
+find "$dirA" -iname "*.m3u" -type f | while IFS= read -r file; do
+  sed -i '/^#/d' "$file"
+  sed -i 's|\\|/|g' "$file"
+  sed -i 's|Y:/ipodLibrary|/music|g' "$file"
+  mv "$file" "${file%.*}.m3u8"
+done
+
+echo "Done!"

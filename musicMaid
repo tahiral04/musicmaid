@@ -1,0 +1,437 @@
+#!/bin/sh
+
+# =========================
+# ====  CONFIGURATION  ====
+# =========================
+
+# === COLORS ===
+# set the ANSI escape mode to color the output on the terminal. See link below:
+# https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797#color-codes
+COLOR_RESET='\033[0m'    # reset mode
+COLOR_SUCCESS='\033[32m' # green
+COLOR_INFO='\033[33m'    # yellow
+COLOR_ERROR='\033[31m'   # red
+
+# === ENCODERS ===
+AAC_ENCODER_PATH="$HOME/.wine/drive_c/qaac/qaac.exe" # the script automatically checks if wine is required and prepares the right command to be executed
+AAC_ENCODER_OPTIONS="--tvbr 100 --quality 2 --gapless-mode 2"
+FFMPEG_PATH="ffmpeg"
+FFMPEG_GLOBAL_OPTIONS="-hide_banner -y"
+PARALLEL_ENCODER=""
+
+# === OPTIONS ===
+THREAD_NUM=$(grep -c processor /proc/cpuinfo)
+CONV_IPOD=1
+CONV_FLAC=1
+CP_IPOD=1
+CP_FLAC=1
+RIP_CD=0
+RIP_FOLDER="mm_cd_rip"
+ABCDE_CONF_FILE=""
+KEEP_VA=0
+COVER_PROCESS=0
+COVER_CONVERT_QUALITY=85
+COVER_DIM="1500x1500"
+COVER_DIM_IPOD="200x200"
+
+# === DIRECTORIES ===
+SRC=""
+DEST_IPOD=""
+DEST_FLAC=""
+
+# ==============
+# ===  MAIN  ===
+# ==============
+
+main() {
+  parse_arguments "$@"
+  check_dependencies
+  if [ "$RIP_CD" -eq 1 ]; then
+    rip_cd
+    printf '\n'
+  fi
+  if [ "$CONV_IPOD" -eq 1 ] || [ "$CONV_FLAC" -eq 1 ] || [ "$CP_FLAC" -eq 1 ] || [ "$CP_IPOD" -eq 1 ]; then
+    printf '%b\n' "${COLOR_INFO}Scanning directory:${COLOR_RESET} \"$SRC\""
+  fi
+  if [ "$CONV_IPOD" -eq 1 ]; then
+    convert_ipod
+    printf '\n'
+  fi
+  if [ "$CONV_FLAC" -eq 1 ]; then
+    convert_flac
+    printf '\n'
+  fi
+  if [ "$CP_IPOD" -eq 1 ] || [ "$CP_FLAC" -eq 1 ]; then
+    copy_files
+    printf '\n'
+  fi
+  if [ "$COVER_PROCESS" -eq 1 ]; then
+    cover_processor
+    printf '\n'
+  fi
+  printf '%b\n' "${COLOR_SUCCESS}All done!${COLOR_RESET}"
+}
+
+# ===================
+# ===  FUNCTIONS  ===
+# ===================
+
+print_help() {
+  cat <<EOF
+Shell script for managing audio files. It can rip CDs, convert WAV to FLAC,
+convert WAV/FLAC to AAC, copy or move files, and process cover images into
+an 'artist/album' directory structure.
+
+Usage:
+  $(basename "$0") [options] src-dir SRC ipod-dir DEST_IPOD flac-dir DEST_FLAC
+
+  src-dir        Source directory. Can be omitted when 'no-ipod', 'no-flac',
+                 'no-copy-ipod', 'no-copy-flac' are set and 'rip' or 'cover'
+                 are not used.
+  ipod-dir       Destination directory for AAC files. Defaults to SRC if
+                 not provided or 'no-copy-ipod' is set.
+  flac-dir       Destination directory for FLAC files. Defaults to SRC if
+                 not provided or 'no-copy-flac' is set.
+
+Options:
+  help           Show this help message and exit.
+  no-ipod        Skip AAC conversions.
+  no-flac        Skip FLAC conversions.
+  no-copy-ipod   Don't copy or move files to DEST_IPOD.
+  no-copy-flac   Don't copy or move files to DEST_FLAC.
+  rip            Rip CD into "SRC/$RIP_FOLDER" before any other operation.
+  keep-va        Prevent automatic renaming of "Various Artists" to
+                 "Compilations".
+  cover          Scan SRC for cover images (cover.png/jpg/jpeg), generate a
+                 200x200 "cover_ipod.jpg", resize originals larger than
+                 1500x1500, convert PNGs to JPG, recompress JPGs above
+                 1 MiB, and strip all metadata. The processed files replace
+                 the originals.
+
+Dependencies:
+  GNU Parallel   Parallel file conversion.
+  abcde          CD ripper.
+  ffmpeg         FLAC encoder.
+  qaac           AAC encoder.
+  ImageMagick    Cover image processing.
+EOF
+}
+
+parse_arguments() {
+  if [ "$#" -eq 0 ]; then
+    printf '%b\n' "${COLOR_ERROR}Error: too few arguments${COLOR_RESET}" >&2
+    print_help
+    exit 1
+  fi
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      help)
+        print_help
+        exit 0
+        ;;
+      no-ipod) CONV_IPOD=0 ;;
+      no-flac) CONV_FLAC=0 ;;
+      no-copy-ipod) CP_IPOD=0 ;;
+      no-copy-flac) CP_FLAC=0 ;;
+      rip) RIP_CD=1 ;;
+      keep-va) KEEP_VA=1 ;;
+      cover) COVER_PROCESS=1 ;;
+      src-dir) [ -z "$SRC" ] && {
+        shift
+        SRC="$1"
+      } ;;
+      ipod-dir) [ -z "$DEST_IPOD" ] && {
+        shift
+        DEST_IPOD="$1"
+      } ;;
+      flac-dir) [ -z "$DEST_FLAC" ] && {
+        shift
+        DEST_FLAC="$1"
+      } ;;
+      *)
+        printf '%b\n' "${COLOR_ERROR}Error: unknown option $1${COLOR_RESET}" >&2
+        printf '%b\n' "${COLOR_INFO}Tip: use -help to see available options.${COLOR_RESET}"
+        exit 1
+        ;;
+    esac
+    shift
+  done
+
+  # check SRC and DEST are valid (see help text)
+  if [ "$CONV_IPOD" -eq 1 ] || [ "$CONV_FLAC" -eq 1 ] || [ "$CP_IPOD" -eq 1 ] || [ "$CP_FLAC" -eq 1 ] || [ "$RIP_CD" -eq 1 ] || [ "$COVER_PROCESS" -eq 1 ]; then # if (converting) or (copying) or (ripping) or (processing cover) ...
+    if [ -z "$SRC" ] || [ ! -d "$SRC" ]; then                                                                                      # ... then SRC must exist and be a directory
+      printf '%b\n' "${COLOR_ERROR}Error: missing or invalid source directory${COLOR_RESET}" >&2
+      exit 1
+    fi
+    SRC="${SRC%/}/"
+  fi
+
+  if [ "$CP_IPOD" -eq 1 ] || [ -n "$DEST_IPOD" ]; then # if (copying) or (DEST is given) ...
+    if [ ! -d "$DEST_IPOD" ]; then                                                    # ... then DEST must exist and be a directory
+      printf '%b\n' "${COLOR_ERROR}Error: missing or invalid destination directory for ipod files${COLOR_RESET}" >&2
+      exit 1
+    fi
+    DEST_IPOD="${DEST_IPOD%/}/"
+  else # fallback to SRC
+    DEST_IPOD="$SRC"
+  fi
+
+  if [ "$CP_FLAC" -eq 1 ] || [ -n "$DEST_FLAC" ]; then # if (copying) or (DEST is given) ...
+    if [ ! -d "$DEST_FLAC" ]; then                                                    # ... then DEST must exist and be a directory
+      printf '%b\n' "${COLOR_ERROR}Error: missing or invalid destination directory for FLAC files${COLOR_RESET}" >&2
+      exit 1
+    fi
+    DEST_FLAC="${DEST_FLAC%/}/"
+  else # fallback to SRC
+    DEST_FLAC="$SRC"
+  fi
+}
+
+check_dependencies() {
+  missing_dep=0
+  for cmd in parallel abcde ffmpeg magick; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+      printf '%b\n' "${COLOR_ERROR}Error: $cmd is not installed${COLOR_RESET}" >&2
+      missing_dep=1
+    fi
+  done
+
+  if [ -z "$AAC_ENCODER_PATH" ]; then
+    printf '%b\n' "${COLOR_ERROR}Error: AAC_ENCODER_PATH is empty${COLOR_RESET}" >&2
+    missing_dep=1
+  elif [ -f "$AAC_ENCODER_PATH" ]; then
+    if head -c 2 "$AAC_ENCODER_PATH" 2>/dev/null | grep -q '^MZ'; then # check if AAC_ENCODER_PATH is a windows executable ...
+      # ... wine is a requirement
+      if ! command -v wine >/dev/null 2>&1; then
+        printf '%b\n' "${COLOR_ERROR}Error: wine is required by the AAC encoder but is not installed${COLOR_RESET}" >&2
+        missing_dep=1
+      fi
+      AAC_ENCODER_PATH="WINEDEBUG=-all wine $AAC_ENCODER_PATH"
+    elif [ ! -x "$AAC_ENCODER_PATH" ]; then # check if AAC_ENCODER_PATH is executable
+      printf '%b\n' "${COLOR_ERROR}Error: AAC encoder exists at \"$AAC_ENCODER_PATH\" but is not executable${COLOR_RESET}" >&2
+      missing_dep=1
+    fi
+  elif ! command -v "$AAC_ENCODER_PATH" >/dev/null 2>&1; then
+    printf '%b\n' "${COLOR_ERROR}Error: $AAC_ENCODER_PATH can't be found or executed${COLOR_RESET}" >&2
+    missing_dep=1
+  fi
+
+  [ "$missing_dep" -eq 1 ] && exit 1
+}
+
+build_target() {
+  # ========
+  # Utility function that builds the destination directory with
+  # 'artist/album' format.
+  #
+  # Usage: build_target "$file" "$directory"
+  # Result: "$target" variable with value "$directory/artist/album"
+  # ========
+
+  file_path="$1"                                                          # result: path/to/artist/album/song.ext
+  file_processed=$(printf '%s\n' "$file_path" | sed "s#${RIP_FOLDER}/##") # remove RIP_FOLDER from file_path
+  file_processed="${file_processed#"$SRC"}"                               # result: artist/album/song.ext
+  IFS='/' read -r artist album _ <<EOF
+$file_processed
+EOF
+  # result: $artist=artist ; $album=album
+
+  [ "$album" = "$(printf '%s\n' "$file_processed" | sed "s#${artist}/##1")" ]
+  if [ "$KEEP_VA" -eq 0 ] && { [ "$artist" = "Various Artists" ] || [ "$artist" = "various artists" ]; }; then
+    artist="Compilations"
+  fi
+
+  target="$2"
+  [ -n "$artist" ] && target="$target$artist/"
+  [ -n "$album" ] && target="$target$album/"
+}
+
+convert_ipod() {
+  PARALLEL_ENCODER="$AAC_ENCODER_PATH $AAC_ENCODER_OPTIONS"
+
+  # export variables needed by the subshells created with GNU Parallel
+  export PARALLEL_ENCODER COLOR_INFO COLOR_RESET
+
+  find "$SRC" \( -iname "*.wav" -o -iname "*.flac" \) -type f \
+  | while IFS= read -r file; do
+
+    # skip conversion if file.m4a already exists
+    [ -f "${file%.*}.m4a" ] && continue
+
+    build_target "$file" "$DEST_IPOD"
+    mkdir -p "$target"
+    printf '%s\0%s\0' "$target" "$file"
+  done | parallel -0 -N2 -j"$THREAD_NUM" --colsep '\0' '
+      target={1}
+      file={2}
+      printf '%b' "'"$COLOR_INFO"'Converting'"$COLOR_RESET"' \"$file\"\n"
+      '"$PARALLEL_ENCODER"' -d "$target" "$file"
+  '
+}
+
+convert_flac() {
+  PARALLEL_ENCODER="$FFMPEG_PATH $FFMPEG_GLOBAL_OPTIONS"
+
+  # export variables needed by the subshells created with GNU Parallel
+  export PARALLEL_ENCODER COLOR_INFO COLOR_RESET
+
+  find "$SRC" -iname "*.wav" -type f \
+  | while IFS= read -r file; do
+
+    # skip conversion if file.flac already exists
+    [ -f "${file%.*}.flac" ] && continue
+
+    build_target "$file" "$DEST_FLAC"
+    mkdir -p "$target"
+    printf '%s\0%s\0' "$target$(basename "$file" .wav).flac" "$file"
+  done | parallel -0 -N2 -j"$THREAD_NUM" --colsep '\0' '
+      target={1}
+      file={2}
+      printf '%b' "'"$COLOR_INFO"'Converting'"$COLOR_RESET"' \"$file\"\n"
+      '"$PARALLEL_ENCODER"' -i "$file" -c:a flac -compression_level 12 "$target"
+  '
+}
+
+copy_files() {
+  find "$SRC" \( -iname "*.m4a" -o -iname "*.mp3" -o -iname "*.flac" \) -type f \
+  | while IFS= read -r file; do
+
+    case "${file##*.}" in
+      m4a|mp3)
+        if [ "$CP_IPOD" -eq 1 ] && { [ -f "${file%.*}.wav" ] || [ -f "${file%.*}.flac" ]; }; then
+          build_target "$file" "$DEST_IPOD"
+          mkdir -p "$target"
+          printf '%b\n' "${COLOR_INFO}Moving${COLOR_RESET} \"$file\" -> \"$target\""
+          mv --update=none "$file" "$target"
+        fi
+        ;;
+      flac)
+        if [ "$CP_FLAC" -eq 1 ]; then
+          build_target "$file" "$DEST_FLAC"
+          mkdir -p "$target"
+          if [ -f "${file%.*}.wav" ]; then
+            printf '%b\n' "${COLOR_INFO}Moving${COLOR_RESET} \"$file\" -> \"$target\""
+            mv -u "$file" "$target"
+          else
+            printf '%b\n' "${COLOR_INFO}Copying${COLOR_RESET} \"$file\" -> \"$target\""
+            cp -u "$file" "$target"
+          fi
+        fi
+        ;;
+    esac
+
+    # copy any file to DEST_IPOD and DEST_FLAC
+    file_basename=$(basename "$file")
+    if [ "$CP_IPOD" -eq 1 ]; then
+      build_target "$file" "$DEST_IPOD"
+      mkdir -p "$target"
+      if [ ! -f "${target}${file_basename%.*}".* ]; then
+        printf '%b\n' "${COLOR_INFO}Copying${COLOR_RESET} \"$file\" -> \"$target\""
+        cp --update=older "$file" "$target"
+      fi
+    fi
+    if [ "$CP_FLAC" -eq 1 ]; then
+      build_target "$file" "$DEST_FLAC"
+      mkdir -p "$target"
+      if [ ! -f "${target}${file_basename%.*}".* ]; then
+        printf '%b\n' "${COLOR_INFO}Copying${COLOR_RESET} \"$file\" -> \"$target\""
+        cp --update=older "$file" "$target"
+      fi
+    fi
+  done
+}
+
+rip_cd() {
+  printf '%b\n' "${COLOR_INFO}Ripping CD to \"${SRC}${RIP_FOLDER}\" ...${COLOR_RESET}"
+
+  # setting ABCDE options
+  ABCDE_CONF_FILE=$(mktemp /tmp/mm_abcde.XXXXXX.conf)
+  write_abcde_conf
+  printf "OUTPUTDIR=\"${SRC}${RIP_FOLDER}\"" >>"$ABCDE_CONF_FILE"
+
+  # ripping cd
+  abcde -c "$ABCDE_CONF_FILE"
+  rip_status=$?
+  if [ "$rip_status" -ne 0 ]; then
+    printf '%b\n' "${COLOR_ERROR}Error: CD ripping failed${COLOR_RESET}" >&2
+    exit 1
+  fi
+
+  printf '%b\n' "${COLOR_SUCCESS}CD ripped successfully!${COLOR_RESET}"
+
+  rm -f "$ABCDE_CONF_FILE"
+}
+
+write_abcde_conf() {
+  tee "$ABCDE_CONF_FILE" <<'EOF' >/dev/null
+LOWDISK=y
+EXTRAVERBOSE=2
+EJECTCD=y
+
+CDDBMETHOD=cddb
+CDDBURL="http://gnudb.gnudb.org/~cddb/cddb.cgi"
+CDDBCOPYLOCAL="y"
+CDDBLOCALDIR="$HOME/.cddb"
+CDDBLOCALRECURSIVE="y"
+CDDBUSELOCAL="y"
+
+CDROMREADERSYNTAX=cdparanoia
+CDPARANOIA=cdparanoia
+CDPARANOIAOPTS="--never-skip=40"
+CDDISCID=cd-discid
+
+ACTIONS=cddb,read,encode,move,clean
+
+OUTPUTTYPE="wav"
+OUTPUTFORMAT='${ARTISTFILE}/${ALBUMFILE}/${TRACKNUM} ${TRACKFILE}'
+VAOUTPUTFORMAT='Various Artists/${ALBUMFILE}/${TRACKNUM} ${TRACKFILE}'
+ONETRACKOUTPUTFORMAT='${ARTISTFILE}/${ALBUMFILE}/${TRACKNUM} ${TRACKFILE}'
+VAONETRACKOUTPUTFORMAT='Various Artists/${ALBUMFILE}/${TRACKNUM} ${TRACKFILE}'
+PADTRACKS=y
+
+# This function takes out dots preceding the album name, and removes a grab
+# bag of illegal characters. It allows spaces, if you do not wish spaces add
+# in -e 's/ /_/g' after the first sed command.
+mungefilename ()
+{
+  echo "$@" | sed -e 's/^\.*//' | tr -d ":><|*/\"'?[:cntrl:]"
+}
+EOF
+}
+
+cover_processor() {
+  tmp_image=$(mktemp /tmp/mm_cover.XXXXXX.jpg)
+  find "$SRC" \( -iname 'cover.png' -o -iname 'cover.jpg' -o -iname 'cover.jpeg' \) -type f \
+  | while IFS= read -r file; do
+
+
+    # creating ipod cover
+    printf '%b\n' "${COLOR_INFO}Creating cover${COLOR_RESET} \"$(dirname "$file")/cover_ipod.jpg\""
+    magick "$file" -thumbnail "${COVER_DIM_IPOD}>" "$tmp_image"
+    cp "$tmp_image" "$(dirname "$file")/cover_ipod.jpg"
+
+    # coverting original file
+    case "${file##*.}" in
+      png|PNG)
+        printf '%b\n' "${COLOR_INFO}Converting cover${COLOR_RESET} \"$file\""
+        magick "$file" -resize "${COVER_DIM}>" -strip -quality "$COVER_CONVERT_QUALITY" "$tmp_image"
+        cp "$tmp_image" "$(dirname "$file")/cover.jpg"
+        rm -f "$file"
+        ;;
+      jpg|JPG|jpeg|JPEG)
+        printf '%b\n' "${COLOR_INFO}Resizing cover${COLOR_RESET} \"$file\""
+        if [ "$(wc -c < "$file")" -gt 1048576 ]; then # if filesize > 1 MiB then...
+          magick "$file" -resize "${COVER_DIM}>" -strip -quality "$COVER_CONVERT_QUALITY" "$tmp_image"
+        else
+          magick "$file" -resize "${COVER_DIM}>" -strip "$tmp_image"
+        fi
+        cp --update "$tmp_image" "$file"
+        ;;
+    esac
+
+  done
+  rm -f "$tmp_image"
+}
+
+main "$@"

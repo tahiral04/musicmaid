@@ -187,21 +187,21 @@ parse_arguments() {
       exit 1
     fi
   fi
-  SRC=$(echo "$SRC" | sed 's#[^/]$#&/#')
+  SRC=${SRC%/}/
 
   DEST_IPOD=${DEST_IPOD:-$SRC}
   if [ "$CP_IPOD" -eq 1 ] && [ ! -d "$DEST_IPOD" ]; then
     log_error "Error: missing or invalid destination directory for ipod files"
     exit 1
   fi
-  DEST_IPOD=$(echo "$DEST_IPOD" | sed 's#[^/]$#&/#')
+  DEST_IPOD=${DEST_IPOD%/}/
 
   DEST_FLAC=${DEST_FLAC:-$SRC}
   if [ "$CP_FLAC" -eq 1 ] && [ ! -d "$DEST_FLAC" ]; then
     log_error "Error: missing or invalid destination directory for FLAC files"
     exit 1
   fi
-  DEST_FLAC=$(echo "$DEST_FLAC" | sed 's#[^/]$#&/#')
+  DEST_FLAC=${DEST_FLAC%/}/
 }
 
 check_dependencies() {

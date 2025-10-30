@@ -305,7 +305,7 @@ copy_files() {
           target_path=$(get_target_path "$file" "$DEST_IPOD")
           mkdir -p "$target_path"
           log_info "Moving" "\"$file\" -> \"$target_path\""
-          mv --update=none "$file" "$target_path"
+          mv --update "$file" "$target_path"
         fi
         ;;
       flac)

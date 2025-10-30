@@ -314,10 +314,10 @@ copy_files() {
           mkdir -p "$target_path"
           if [ -f "${file%.*}.wav" ]; then
             log_info "Moving" "\"$file\" -> \"$target_path\""
-            mv -u "$file" "$target_path"
+            mv --update "$file" "$target_path"
           else
             log_info "Copying" "\"$file\" -> \"$target_path\""
-            cp -u "$file" "$target_path"
+            cp --update "$file" "$target_path"
           fi
         fi
         ;;

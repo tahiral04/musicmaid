@@ -330,7 +330,7 @@ copy_files() {
       mkdir -p "$target_path"
       if [ ! -f "${target_path}${file_basename%.*}".* ]; then
         log_info "Copying" "\"$file\" -> \"$target_path\""
-        cp --update=older "$file" "$target_path"
+        cp --update "$file" "$target_path"
       fi
     fi
     if [ "$CP_FLAC" -eq 1 ]; then
@@ -338,7 +338,7 @@ copy_files() {
       mkdir -p "$target_path"
       if [ ! -f "${target_path}${file_basename%.*}".* ]; then
         log_info "Copying" "\"$file\" -> \"$target_path\""
-        cp --update=older "$file" "$target_path"
+        cp --update "$file" "$target_path"
       fi
     fi
   done

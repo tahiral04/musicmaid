@@ -15,6 +15,8 @@ COLOR_ERROR='\033[31m'   # red
 # --- ENCODERS ---
 AAC_ENCODER_PATH="$HOME/.wine/drive_c/qaac/qaac.exe" # the script automatically checks if wine is required and prepares the right command to be executed
 AAC_ENCODER_OPTIONS="--tvbr 100 --quality 2 --gapless-mode 2"
+AAC_ENCODER_USE_WINE=0
+AAC_ENCODER_WINE="WINEDEBUG=-all wine"
 FFMPEG_PATH="ffmpeg"
 FFMPEG_GLOBAL_OPTIONS="-hide_banner -y"
 
@@ -187,6 +189,7 @@ parse_arguments() {
       exit 1
     fi
   fi
+  SRC=$(realpath "$SRC")
   SRC=${SRC%/}/
 
   DEST_IPOD=${DEST_IPOD:-$SRC}
@@ -194,6 +197,7 @@ parse_arguments() {
     log_error "Error: missing or invalid destination directory for ipod files"
     exit 1
   fi
+  DEST_IPOD=$(realpath "$DEST_IPOD")
   DEST_IPOD=${DEST_IPOD%/}/
 
   DEST_FLAC=${DEST_FLAC:-$SRC}
@@ -201,6 +205,7 @@ parse_arguments() {
     log_error "Error: missing or invalid destination directory for FLAC files"
     exit 1
   fi
+  DEST_FLAC=$(realpath "$DEST_FLAC")
   DEST_FLAC=${DEST_FLAC%/}/
 }
 
@@ -223,7 +228,7 @@ check_dependencies() {
         log_error "Error: wine is required by the AAC encoder but is not installed"
         missing_dep=1
       fi
-      AAC_ENCODER_PATH="WINEDEBUG=-all wine $AAC_ENCODER_PATH"
+      AAC_ENCODER_USE_WINE=1
     elif [ ! -x "$AAC_ENCODER_PATH" ]; then
     log_error "Error: AAC encoder at \"$AAC_ENCODER_PATH\" is not executable"
       missing_dep=1
@@ -257,7 +262,7 @@ get_target_path() {
 
 convert_ipod() {
   # export variables needed by the subshells created with GNU Parallel
-  export COLOR_INFO COLOR_RESET AAC_ENCODER_PATH AAC_ENCODER_OPTIONS
+  export COLOR_INFO COLOR_RESET AAC_ENCODER_PATH AAC_ENCODER_OPTIONS AAC_ENCODER_USE_WINE AAC_ENCODER_WINE
 
   find "$SRC" \( -iname "*.wav" -o -iname "*.flac" \) -type f \
   | while IFS= read -r file; do
@@ -268,10 +273,14 @@ convert_ipod() {
     mkdir -p "$target_path"
     printf '%s\0%s\0' "$target_path" "$file"
   done | parallel -0 -N2 -j"$THREAD_NUM" --colsep '\0' '
-      dest_dir={1}
-      file={2}
-      printf '%b' "'"$COLOR_INFO"'Converting'"$COLOR_RESET"' \"$file\"\n"
-      '"$AAC_ENCODER_PATH"' '"$AAC_ENCODER_OPTIONS"' -d "$dest_dir" "$file"
+    dest_dir={1}
+    file={2}
+    printf '%b' "${COLOR_INFO}Converting${COLOR_RESET} \"$file\"\n"
+    if [ "$AAC_ENCODER_USE_WINE" -eq 1 ]; then
+      '"$AAC_ENCODER_WINE"' "$AAC_ENCODER_PATH" '"$AAC_ENCODER_OPTIONS"' -d "$dest_dir" "$file"
+    else
+      "$AAC_ENCODER_PATH" '"$AAC_ENCODER_OPTIONS"' -d "$dest_dir" "$file"
+    fi
   '
 }
 
@@ -288,10 +297,10 @@ convert_flac() {
     mkdir -p "$target_path"
     printf '%s\0%s\0' "$target_path$(basename "$file" .wav).flac" "$file"
   done | parallel -0 -N2 -j"$THREAD_NUM" --colsep '\0' '
-      dest_dir={1}
-      file={2}
-      printf '%b' "'"$COLOR_INFO"'Converting'"$COLOR_RESET"' \"$file\"\n"
-      '"$FFMPEG_PATH"' '"$FFMPEG_GLOBAL_OPTIONS"' -i "$file" -c:a flac -compression_level 12 "$dest_dir"
+    dest_dir={1}
+    file={2}
+    printf '%b' "${COLOR_INFO}Converting${COLOR_RESET} \"$file\"\n"
+    "$FFMPEG_PATH" '"$FFMPEG_GLOBAL_OPTIONS"' -i "$file" -c:a flac -compression_level 12 "$dest_dir"
   '
 }
 

@@ -1,18 +1,20 @@
-#!/bin/bash
+#!/bin/zsh
 
-dirA="$1"
+dir="$1"
 
-if [ -z "$dirA" ]; then
+if [ -z "$dir" ]; then
   echo "Usage: $(basename $0) <directory>" >&2
   exit 1
 fi
 
-if [ ! -d "$dirA" ]; then
+if [ ! -d "$dir" ]; then
   echo "Error: directory must exist" >&2
   exit 1
 fi
 
-find "$dirA" -iname "*.m3u" -type f | while IFS= read -r file; do
+dir=$(realpath "$dir")
+
+find "$dir" -iname "*.m3u" -type f | while IFS= read -r file; do
   sed -i '/^#/d' "$file"
   sed -i 's|\\|/|g' "$file"
   sed -i 's|Y:/ipodLibrary|/music|g' "$file"

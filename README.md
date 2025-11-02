@@ -1,0 +1,52 @@
+# Audio Management Scripts
+
+A collection of shell scripts I use to manage my music library.
+
+## Scripts
+
+### musicMaid
+
+Feature rich script that does most of the jobs.
+
+**Features:**
+- Rip CDs to WAV format
+- Convert WAV files to FLAC
+- Convert WAV/FLAC files to AAC
+- Copy or move files to destination directories organized by artist/album structure
+- Process cover images
+- Multi-threaded conversions
+
+**Usage:** `musicMaid [options] src-dir SRC ipod-dir DEST_IPOD flac-dir DEST_FLAC`
+
+**Options:**
+- `no-ipod` - Skip AAC conversions
+- `no-flac` - Skip FLAC conversions
+- `no-copy-ipod` - Don't copy or move files to DEST_IPOD
+- `no-copy-flac` - Don't copy or move files to DEST_FLAC
+- `rip` - Rip CD into "SRC/mm_cd_rip" before other operations
+- `keep-va` - Keep "Various Artists" folder name (default: rename to "Compilations")
+- `cover` - Process cover images in the source directory
+- `help` - Show help message
+
+**Dependencies:** GNU Parallel, abcde, ffmpeg, qaac, ImageMagick
+
+---
+
+### playlist_itunes_to_ipod
+
+Converts M3U playlists created by iTunes to M3U8 format and updates file paths for RockBox compatibility.
+
+**Usage:** `playlist_itunes_to_ipod <directory>`
+
+---
+
+### ytdlp2mp3
+
+Converts audio files downloaded with yt-dlp to MP3 format. It can also cut audio in the beginning and/or the end.
+
+**Usage:** `ytdlp2mp3 <file> [start_seconds] [end_seconds]`
+
+**Options:**
+- `file` - Path to the audio file
+- `start_seconds` - Start time in seconds
+- `end_seconds` - End time in seconds

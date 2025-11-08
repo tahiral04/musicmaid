@@ -26,17 +26,15 @@ process_playlist() {
 
   case "$MODE" in
     itunes)
-      echo "Converting iTunes -> iPod: $file_path"
-      sed -i '' '/^#/d' "$file_path"
-      sed -i '' 's|\\|/|g' "$file_path"
-      sed -i '' 's|Y:/ipodLibrary|/music|g' "$file_path"
+      sed -i '/^#/d' "$file_path"
+      sed -i 's|\\|/|g' "$file_path"
+      sed -i 's|Y:/ipodLibrary|/music|g' "$file_path"
       mv "$file_path" "${file_path:r}.m3u8"
       ;;
     ipod)
-      echo "Converting iPod -> iTunes: $file_path"
-      sed -i '' 's#^/<HDD0>##' "$file_path"
-      sed -i '' 's|/music|Y:\\ipodLibrary|g' "$file_path"
-      sed -i '' 's|/|\\|g' "$file_path"
+      sed -i 's#^/<HDD0>##' "$file_path"
+      sed -i 's|/music|Y:\\ipodLibrary|g' "$file_path"
+      sed -i 's|/|\\|g' "$file_path"
       mv "$file_path" "${file_path:r}.m3u"
       ;;
   esac
@@ -52,7 +50,7 @@ if [ -d "$TARGET_PATH" ]; then
     fi
   done
 elif [ -f "$TARGET_PATH" ]; then
-  echo "Processing single file: $TARGET_PATH"
+  echo "Processing file: $TARGET_PATH"
   if [[ "$MODE" = "itunes" && "${TARGET_PATH:e}" != "m3u" ]]; then
     echo "Error: 'itunes' mode requires a .m3u file." >&2
     exit 1

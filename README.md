@@ -32,11 +32,15 @@ Feature rich script that does most of the jobs.
 
 ---
 
-### playlist_itunes_to_ipod
+### playlistAdaptor
 
-Converts M3U playlists created by iTunes to M3U8 format and updates file paths for RockBox compatibility.
+Adapts playlists created by iTunes for RockBox compatibility and viceversa.
 
-**Usage:** `playlist_itunes_to_ipod <directory>`
+**Usage:** `playlistAdaptor mode file`
+
+**Options:**
+- `mode` - Conversion mode, accepts values 'itunes' (converts for iPod) or 'ipod' (converts for iTunes)
+- `file` - Path to a playlist file or a directory containing playlist files
 
 ---
 

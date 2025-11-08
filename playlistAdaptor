@@ -1,0 +1,69 @@
+#!/bin/zsh
+
+if [ "$#" -lt 2 ]; then
+  cat <<EOF
+Usage:
+  $(basename $0) mode file
+
+Options:
+  mode      Conversion mode, accepts values 'itunes' (converts for iPod)
+            or 'ipod' (converts for iTunes)
+  file      Path to a playlist file or a directory containing playlist files
+EOF
+  exit 1
+fi
+
+MODE="$1"
+TARGET_PATH="$2"
+
+if [ ! -e "$TARGET_PATH" ]; then
+  echo "Error: File or directory not found" >&2
+  exit 1
+fi
+
+process_playlist() {
+  file_path="$1"
+
+  case "$MODE" in
+    itunes)
+      echo "Converting iTunes -> iPod: $file_path"
+      sed -i '' '/^#/d' "$file_path"
+      sed -i '' 's|\\|/|g' "$file_path"
+      sed -i '' 's|Y:/ipodLibrary|/music|g' "$file_path"
+      mv "$file_path" "${file_path:r}.m3u8"
+      ;;
+    ipod)
+      echo "Converting iPod -> iTunes: $file_path"
+      sed -i '' 's#^/<HDD0>##' "$file_path"
+      sed -i '' 's|/music|Y:\\ipodLibrary|g' "$file_path"
+      sed -i '' 's|/|\\|g' "$file_path"
+      mv "$file_path" "${file_path:r}.m3u"
+      ;;
+  esac
+}
+
+if [ -d "$TARGET_PATH" ]; then
+  echo "Processing directory: $TARGET_PATH"
+  for file in "$TARGET_PATH"/*; do
+    if [[ "$MODE" = "itunes" && "${file:e}" = "m3u" ]]; then
+      process_playlist "$file"
+    elif [[ "$MODE" = "ipod" && "${file:e}" = "m3u8" ]]; then
+      process_playlist "$file"
+    fi
+  done
+elif [ -f "$TARGET_PATH" ]; then
+  echo "Processing single file: $TARGET_PATH"
+  if [[ "$MODE" = "itunes" && "${TARGET_PATH:e}" != "m3u" ]]; then
+    echo "Error: 'itunes' mode requires a .m3u file." >&2
+    exit 1
+  elif [[ "$MODE" = "ipod" && "${TARGET_PATH:e}" != "m3u8" ]]; then
+    echo "Error: 'ipod' mode requires a .m3u8 file." >&2
+    exit 1
+  fi
+  process_playlist "$TARGET_PATH"
+else
+  echo "Error: Invalid mode '$MODE'." >&2
+  exit 1
+fi
+
+echo "Done!"

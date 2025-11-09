@@ -45,31 +45,14 @@ DEST_FLAC=""
 # ==============
 
 main() {
-  parse_arguments "$@"
   check_dependencies
-  if [ "$RIP_CD" -eq 1 ]; then
-    rip_cd
-    printf '\n'
-  fi
-  if [ "$CONV_IPOD" -eq 1 ] || [ "$CONV_FLAC" -eq 1 ] || [ "$CP_FLAC" -eq 1 ] || [ "$CP_IPOD" -eq 1 ] || [ "$COVER_PROCESS" -eq 1 ]; then
-    log_info "Scanning directory..."
-  fi
-  if [ "$CONV_IPOD" -eq 1 ]; then
-    convert_ipod
-    printf '\n'
-  fi
-  if [ "$CONV_FLAC" -eq 1 ]; then
-    convert_flac
-    printf '\n'
-  fi
-  if [ "$CP_IPOD" -eq 1 ] || [ "$CP_FLAC" -eq 1 ]; then
-    copy_files
-    printf '\n'
-  fi
-  if [ "$COVER_PROCESS" -eq 1 ]; then
-    cover_processor
-    printf '\n'
-  fi
+  parse_arguments "$@"
+  [ "$RIP_CD" -eq 1 ] && { rip_cd; printf '\n'; }
+  [ "$CONV_IPOD" -eq 1 ] || [ "$CONV_FLAC" -eq 1 ] || [ "$CP_FLAC" -eq 1 ] || [ "$CP_IPOD" -eq 1 ] || [ "$COVER_PROCESS" -eq 1 ] && log_info "Scanning directory..."
+  [ "$CONV_IPOD" -eq 1 ] && { convert_ipod; printf '\n'; }
+  [ "$CONV_FLAC" -eq 1 ] && { convert_flac; printf '\n'; }
+  [ "$CP_IPOD" -eq 1 ] || [ "$CP_FLAC" -eq 1 ] && { copy_files; printf '\n'; }
+  [ "$COVER_PROCESS" -eq 1 ] && { cover_processor; printf '\n'; }
   log_success "All done!"
 }
 
@@ -77,27 +60,19 @@ main() {
 # ===  FUNCTIONS  ===
 # ===================
 
-log_standard() { [ "$#" -gt 0 ] && printf ' %s' "$@"; printf '\n'; }
-
-log_success() {
-  printf '%b' "${COLOR_SUCCESS}${1}${COLOR_RESET}"
+log_standard() {
+  color="$1"
   shift
-  log_standard "$@"
-}
-
-log_info() {
-  printf '%b' "${COLOR_INFO}${1}${COLOR_RESET}"
+  printf '%b%s%b' "$color" "$1" "$COLOR_RESET"
   shift
-  log_standard "$@"
+  [ "$#" -gt 0 ] && printf ' %s' "$@"; printf '\n'
 }
 
-log_error() {
-  {
-    printf '%b' "${COLOR_ERROR}${1}${COLOR_RESET}"
-    shift
-    log_standard "$@"
-  } >&2
-}
+log_success() { log_standard "$COLOR_SUCCESS" "$@"; }
+
+log_info() { log_standard "$COLOR_INFO" "$@"; }
+
+log_error() { { log_standard "$COLOR_ERROR" "$@"; } >&2; }
 
 cleanup_tmp_files() { rm -f /tmp/mm_abcde.* /tmp/mm_cover.* || true; }
 

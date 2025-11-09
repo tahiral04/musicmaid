@@ -16,13 +16,13 @@ Feature rich script that does most of the jobs.
 - Process cover images
 - Multi-threaded conversions
 
-**Usage:** `musicMaid [options] src-dir SRC ipod-dir DEST_IPOD flac-dir DEST_FLAC`
+**Usage:** `musicMaid [options] src-dir SRC ipod-dir IPOD_DIR flac-dir FLAC_DIR`
 
 **Options:**
 - `no-ipod` - Skip AAC conversions
 - `no-flac` - Skip FLAC conversions
-- `no-copy-ipod` - Don't copy or move files to DEST_IPOD
-- `no-copy-flac` - Don't copy or move files to DEST_FLAC
+- `no-copy-ipod` - Don't copy or move files to IPOD_DIR
+- `no-copy-flac` - Don't copy or move files to FLAC_DIR
 - `rip` - Rip CD into "SRC/mm_cd_rip" before other operations
 - `keep-va` - Keep "Various Artists" folder name (default: rename to "Compilations")
 - `cover` - Process cover images in the source directory

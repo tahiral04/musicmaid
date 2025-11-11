@@ -165,7 +165,7 @@ check_dependencies() {
   if [ -z "$AAC_ENCODER_PATH" ]; then
     log_error "Error: AAC_ENCODER_PATH is empty"
     missing_dep=1
-  elif [ -f "$AAC_ENCODER_PATH" ]; then
+  elif [ -e "$AAC_ENCODER_PATH" ]; then
     # check if AAC_ENCODER_PATH is a windows executable
     if head -c 2 "$AAC_ENCODER_PATH" 2>/dev/null | grep -q '^MZ'; then
       command -v wine >/dev/null 2>&1 || { log_error "Error: wine is required by the AAC encoder but is not installed"; missing_dep=1; }
@@ -202,7 +202,7 @@ convert_ipod() {
 
   find "$SRC_DIR" \( -iname "*.wav" -o -iname "*.flac" \) -type f \
   | while IFS= read -r file; do
-    [ -f "${file%.*}.m4a" ] && continue
+    [ -e "${file%.*}.m4a" ] && continue
     target_path=$(get_target_path "$file" "$IPOD_DIR")
     mkdir -p "$target_path"
     printf '%s\0%s\0' "$target_path" "$file"
@@ -223,7 +223,7 @@ convert_flac() {
 
   find "$SRC_DIR" -iname "*.wav" -type f \
   | while IFS= read -r file; do
-    [ -f "${file%.*}.flac" ] && continue
+    [ -e "${file%.*}.flac" ] && continue
     target_path=$(get_target_path "$file" "$FLAC_DIR")
     mkdir -p "$target_path"
     printf '%s\0%s\0' "$target_path$(basename "$file" .wav).flac" "$file"
@@ -240,24 +240,26 @@ copy_files() {
   | while IFS= read -r file; do
     case "${file##*.}" in
       m4a|mp3)
-        if [ "$CP_IPOD" -eq 1 ] && { [ -f "${file%.*}.wav" ] || [ -f "${file%.*}.flac" ]; }; then
+        if [ "$CP_IPOD" -eq 1 ] && { [ -e "${file%.*}.wav" ] || [ -e "${file%.*}.flac" ]; }; then
           target_path=$(get_target_path "$file" "$IPOD_DIR")
           mkdir -p "$target_path"
-          log_info "Moving" "\"$file\" -> \"$target_path\""
+          log_info "Moving ipod" "\"$file\" -> \"$target_path\""
           mv --update "$file" "$target_path"
+          continue
         fi
         ;;
       flac)
         if [ "$CP_FLAC" -eq 1 ]; then
           target_path=$(get_target_path "$file" "$FLAC_DIR")
           mkdir -p "$target_path"
-          if [ -f "${file%.*}.wav" ]; then
-            log_info "Moving" "\"$file\" -> \"$target_path\""
+          if [ -e "${file%.*}.wav" ]; then
+            log_info "Moving flac" "\"$file\" -> \"$target_path\""
             mv --update "$file" "$target_path"
           else
-            log_info "Copying" "\"$file\" -> \"$target_path\""
+            log_info "Copying flac" "\"$file\" -> \"$target_path\""
             cp --update "$file" "$target_path"
           fi
+          continue
         fi
         ;;
     esac
@@ -267,16 +269,16 @@ copy_files() {
     if [ "$CP_IPOD" -eq 1 ]; then
       target_path=$(get_target_path "$file" "$IPOD_DIR")
       mkdir -p "$target_path"
-      if [ ! -f "${target_path}${file_basename%.*}".* ]; then
-        log_info "Copying" "\"$file\" -> \"$target_path\""
+      if [ ! -e "${target_path}${file_basename%.*}.*" ]; then
+        log_info "Copying ipod" "\"$file\" -> \"$target_path\""
         cp --update "$file" "$target_path"
       fi
     fi
     if [ "$CP_FLAC" -eq 1 ]; then
       target_path=$(get_target_path "$file" "$FLAC_DIR")
       mkdir -p "$target_path"
-      if [ ! -f "${target_path}${file_basename%.*}".* ]; then
-        log_info "Copying" "\"$file\" -> \"$target_path\""
+      if [ ! -e "${target_path}${file_basename%.*}.*" ]; then
+        log_info "Copying flac" "\"$file\" -> \"$target_path\""
         cp --update "$file" "$target_path"
       fi
     fi

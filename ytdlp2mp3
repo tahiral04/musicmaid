@@ -17,7 +17,7 @@ fi
 if [[ -n "$end" && "$end" -gt 0 ]]; then
   opts+=(-to "$end")
 fi
-opts+=(-hide_banner -vn -c:a libmp3lame -q:a 2)
+opts+=(-hide_banner -vn -c:a libmp3lame -q:a 5)
 
 output="${file%.*}.mp3"
 echo "Converting: $file -> $output"

@@ -16,7 +16,7 @@ Feature rich script that does most of the jobs.
 - Process cover images
 - Multi-threaded conversions
 
-**Usage:** `musicMaid [options] src-dir SRC ipod-dir IPOD_DIR flac-dir FLAC_DIR`
+**Usage:** `musicMaid [options] src-dir <SRC> ipod-dir <IPOD_DIR> flac-dir <FLAC_DIR>`
 
 **Options:**
 - `no-ipod` - Skip AAC conversions

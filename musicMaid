@@ -79,7 +79,7 @@ convert WAV/FLAC to AAC, copy or move files, and process cover images into
 an 'artist/album' directory structure.
 
 Usage:
-  $(basename "$0") [options] src-dir SRC ipod-dir IPOD_DIR flac-dir FLAC_DIR
+  $(basename "$0") [options] src-dir <SRC> ipod-dir <IPOD_DIR> flac-dir <FLAC_DIR>
 
   src-dir        Source directory. Can be omitted when 'no-ipod', 'no-flac',
                  'no-copy-ipod', 'no-copy-flac' are set and 'rip' or 'cover'
@@ -209,7 +209,7 @@ convert_ipod() {
   done | parallel -0 -N2 -j"$THREAD_NUM" --colsep '\0' '
     dest_dir={1}
     file={2}
-    printf '%b' "${COLOR_INFO}Converting${COLOR_RESET} \"$file\"\n"
+    printf '%b' "${COLOR_INFO}Converting audio${COLOR_RESET} \"$file\"\n"
     if [ "$AAC_ENCODER_USE_WINE" -eq 1 ]; then
       '"$AAC_ENCODER_WINE"' "$AAC_ENCODER_PATH" '"$AAC_ENCODER_OPTIONS"' -d "$dest_dir" "$file"
     else
@@ -230,7 +230,7 @@ convert_flac() {
   done | parallel -0 -N2 -j"$THREAD_NUM" --colsep '\0' '
     dest_dir={1}
     file={2}
-    printf '%b' "${COLOR_INFO}Converting${COLOR_RESET} \"$file\"\n"
+    printf '%b' "${COLOR_INFO}Converting audio${COLOR_RESET} \"$file\"\n"
     "$FFMPEG_PATH" '"$FFMPEG_GLOBAL_OPTIONS"' -i "$file" -c:a flac -compression_level 12 "$dest_dir"
   '
 }
@@ -327,18 +327,18 @@ EOF
 
 cover_processor() {
   tmp_image=$(mktemp /tmp/mm_cover.XXXXXX.jpg)
-  find "$SRC_DIR" \( -iname 'cover.png' -o -iname 'cover.jpg' -o -iname 'cover.jpeg' \) -type f \
+  find "$SRC_DIR" \( -iname '*cover.png' -o -iname '*cover.jpg' -o -iname '*cover.jpeg' \) -type f \
   | while IFS= read -r file; do
 
-    log_info "Creating cover" "\"$(dirname "$file")/cover_ipod.jpg\""
+    log_info "Creating cover" "\"${file%.*}_ipod.jpg\""
     magick "$file" -thumbnail "${COVER_DIM_IPOD}>" "$tmp_image"
-    cp "$tmp_image" "$(dirname "$file")/cover_ipod.jpg"
+    cp "$tmp_image" "${file%.*}_ipod.jpg"
 
     case "${file##*.}" in
       png|PNG)
         log_info "Converting cover" "\"$file\""
         magick "$file" -resize "${COVER_DIM}>" -strip -quality "$COVER_CONVERT_QUALITY" "$tmp_image"
-        cp "$tmp_image" "$(dirname "$file")/cover.jpg"
+        cp "$tmp_image" "${file%.*}.jpg"
         rm -f "$file"
         ;;
       jpg|JPG|jpeg|JPEG)

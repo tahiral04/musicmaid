@@ -13,7 +13,8 @@ COLOR_INFO='\033[33m'    # yellow
 COLOR_ERROR='\033[31m'   # red
 
 # --- ENCODERS ---
-ENCODER_AAC="$HOME/.wine/drive_c/qaac/qaac.exe"
+#ENCODER_AAC="$HOME/.wine/drive_c/qaac/qaac.exe"
+ENCODER_AAC="$HOME/qaac/qaac.exe"
 ENCODER_AAC_OPTIONS="--tvbr 100 --quality 2 --gapless-mode 2"
 ENCODER_AAC_USE_WINE=0
 ENCODER_FLAC="ffmpeg"
@@ -90,7 +91,8 @@ __log_color() {
   shift
   printf '%b%s%b' "$color" "$1" "$COLOR_RESET"
   shift
-  [ "$#" -gt 0 ] && printf ' %s' "$@"; printf '\n'
+  [ "$#" -gt 0 ] && printf ' %s' "$@"
+  printf '\n'
 }
 
 log_success() { __log_color "$COLOR_SUCCESS" "$@"; }
@@ -172,28 +174,35 @@ parse_parameters() {
 check_dependency() {
   # Checks if a command is available. Returns 1 if at least one is missing, 0 otherwise.
   # Also accepts variable names containing command paths.
-  # Usage: check_dependency "command" ["command" ...]
+  # Usage: check_dependency command [command ...]
 
   missing_dep=0
-  for cmd in "$@"; do
-    var_name=""
-    if eval 'value=${'${cmd}'#}' 2>/dev/null; then eval "var_name=\$$cmd"
-    else var_name="\$$cmd"
+  for input in "$@"; do
+    item_to_check=""
+    display_name="$input"
+    if (eval 'value=${'${input}'#}' 2>/dev/null); then
+      eval "item_to_check=\$$input"
+    else
+      item_to_check="$input"
     fi
-    if [ -f "$var_name" ] && head -c 2 "$var_name" 2>/dev/null | grep -q '^MZ'; then
-      if ! command -v wine >/dev/null 2>&1; then
-        log_error "Error: wine is required by $cmd but is not installed"
+    if [ -f "$item_to_check" ]; then
+      if head -c 2 "$item_to_check" 2>/dev/null | grep -q '^MZ'; then
+        if ! command -v wine >/dev/null 2>&1; then
+          log_error "Error: wine is required by $item_to_check but is not installed"
+          missing_dep=1
+        fi
+        # ... logica opzionale per _USE_WINE ...
+      
+      elif [ ! -x "$item_to_check" ]; then
+        log_error "Error: $item_to_check exists but is not an executable file"
         missing_dep=1
-        continue
       fi
-      var_name=$(echo "$var_name" | tr '[:lower:]' '[:upper:]')
-      eval "${var_name}_USE_WINE=1"
-    elif ! command -v "$cmd" >/dev/null 2>&1; then
-      log_error "Error: $cmd is not installed"
+    elif ! command -v "$item_to_check" >/dev/null 2>&1; then
+      log_error "Error: $display_name is not installed"
       missing_dep=1
     fi
   done
-  printf '%s' "$missing_dep"
+  return "$missing_dep"
 }
 
 get_target_path() {
@@ -211,7 +220,7 @@ get_target_path() {
 }
 
 convert_ipod() {
-  [ "$(check_dependency ENCODER_AAC parallel)" -eq 1 ] && { log_info "Skipping AAC conversion due to missing dependencies"; return 1; }
+  [ ! $(check_dependency ENCODER_AAC parallel) ] && { log_info "Skipping AAC conversion due to missing dependencies"; return 1; }
 
   export COLOR_INFO COLOR_RESET ENCODER_AAC ENCODER_AAC_OPTIONS ENCODER_AAC_USE_WINE ENCODER_WINE
   find "$SRC_DIR" \( -iname "*.wav" -o -iname "*.flac" \) -type f \
@@ -233,7 +242,7 @@ convert_ipod() {
 }
 
 convert_flac() {
-  [ "$(check_dependency ENCODER_FLAC parallel)" -eq 1 ] && { log_info "Skipping FLAC conversion due to missing dependencies"; return 1; }
+  [ ! $(check_dependency ENCODER_FLAC parallel) ] && { log_info "Skipping FLAC conversion due to missing dependencies"; return 1; }
 
   export COLOR_INFO COLOR_RESET ENCODER_FLAC ENCODER_FLAC_OPTIONS ENCODER_FLAC_USE_WINE ENCODER_WINE
   find "$SRC_DIR" -iname "*.wav" -type f \
@@ -305,7 +314,7 @@ copy_files() {
 }
 
 rip_cd() {
-  [ "$(check_dependency abcde)" -eq 1 ] && { log_info "Skipping CD rip due to missing dependencies"; return 1; }
+  [ ! $(check_dependency abcde) ] && { log_info "Skipping CD rip due to missing dependencies"; return 1; }
 
   conf_file=$(mktemp /tmp/mm_abcde.XXXXXX.conf)
   write_abcde_conf "$conf_file"
@@ -345,7 +354,7 @@ EOF
 }
 
 cover_processor() {
-  [ "$(check_dependency magick)" -eq 1 ] && { log_info "Skipping cover processing due to missing dependencies"; return 1; }
+  [ ! $(check_dependency magick) ] && { log_info "Skipping cover processing due to missing dependencies"; return 1; }
 
   tmp_image=$(mktemp /tmp/mm_cover.XXXXXX.jpg)
   find "$SRC_DIR" \( -iname '*cover.png' -o -iname '*cover.jpg' -o -iname '*cover.jpeg' \) -type f \
@@ -379,11 +388,11 @@ cover_processor() {
 
 trap cleanup_tmp_files EXIT INT TERM
 parse_parameters "$@"
-[ "$RIP_CD" -eq 1 ] && { rip_cd; printf '\n'; }
+[ "$RIP_CD" -eq 1 ] && { rip_cd && printf '\n'; }
 [ "$CONV_IPOD" -eq 1 ] || [ "$CONV_FLAC" -eq 1 ] || [ "$CP_FLAC" -eq 1 ] || [ "$CP_IPOD" -eq 1 ] || [ "$COVER_PROCESS" -eq 1 ] && log_info "Scanning directory..."
-[ "$CONV_IPOD" -eq 1 ] && { convert_ipod; printf '\n'; }
-[ "$CONV_FLAC" -eq 1 ] && { convert_flac; printf '\n'; }
-[ "$CP_IPOD" -eq 1 ] || [ "$CP_FLAC" -eq 1 ] && { copy_files; printf '\n'; }
-[ "$COVER_PROCESS" -eq 1 ] && { cover_processor; printf '\n'; }
+[ "$CONV_IPOD" -eq 1 ] && { convert_ipod && printf '\n'; }
+[ "$CONV_FLAC" -eq 1 ] && { convert_flac && printf '\n'; }
+[ "$CP_IPOD" -eq 1 ] || [ "$CP_FLAC" -eq 1 ] && { copy_files && printf '\n'; }
+[ "$COVER_PROCESS" -eq 1 ] && { cover_processor && printf '\n'; }
 log_success "All done!"
 exit 0

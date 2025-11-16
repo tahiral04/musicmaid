@@ -1,11 +1,11 @@
 #!/bin/sh
 
-# =========================
-# ====  CONFIGURATION  ====
-# =========================
+# =======================
+# ===  CONFIGURATION  ===
+# =======================
 
 # --- COLORS ---
-# set the ANSI escape mode to color the output on the terminal. See link below:
+# Set the ANSI escape mode to color the output on the terminal. See link below:
 # https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797#color-codes
 COLOR_RESET='\033[0m'    # reset mode
 COLOR_SUCCESS='\033[32m' # green
@@ -13,12 +13,13 @@ COLOR_INFO='\033[33m'    # yellow
 COLOR_ERROR='\033[31m'   # red
 
 # --- ENCODERS ---
-AAC_ENCODER_PATH="$HOME/.wine/drive_c/qaac/qaac.exe"
-AAC_ENCODER_OPTIONS="--tvbr 100 --quality 2 --gapless-mode 2"
-AAC_ENCODER_USE_WINE=0
-AAC_ENCODER_WINE="WINEDEBUG=-all wine"
-FFMPEG_PATH="ffmpeg"
-FFMPEG_GLOBAL_OPTIONS="-hide_banner -y"
+ENCODER_AAC="$HOME/.wine/drive_c/qaac/qaac.exe"
+ENCODER_AAC_OPTIONS="--tvbr 100 --quality 2 --gapless-mode 2"
+ENCODER_AAC_USE_WINE=0
+ENCODER_FLAC="ffmpeg"
+ENCODER_FLAC_OPTIONS="-hide_banner -y"
+ENCODER_FLAC_USE_WINE=0
+ENCODER_WINE="WINEDEBUG=-all wine"
 
 # --- OPTIONS ---
 THREAD_NUM=$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf '1')
@@ -27,8 +28,7 @@ CONV_FLAC=1
 CP_IPOD=1
 CP_FLAC=1
 RIP_CD=0
-RIP_FOLDER="mm_cd_rip"
-ABCDE_CONF_FILE=""
+RIP_CD_FOLDER="mm_cd_rip"
 KEEP_VA=0
 COVER_PROCESS=0
 COVER_CONVERT_QUALITY=85
@@ -44,39 +44,12 @@ FLAC_DIR=""
 # ===  FUNCTIONS  ===
 # ===================
 
-main() {
-  check_dependencies
-  parse_arguments "$@"
-  [ "$RIP_CD" -eq 1 ] && { rip_cd; printf '\n'; }
-  [ "$CONV_IPOD" -eq 1 ] || [ "$CONV_FLAC" -eq 1 ] || [ "$CP_FLAC" -eq 1 ] || [ "$CP_IPOD" -eq 1 ] || [ "$COVER_PROCESS" -eq 1 ] && log_info "Scanning directory..."
-  [ "$CONV_IPOD" -eq 1 ] && { convert_ipod; printf '\n'; }
-  [ "$CONV_FLAC" -eq 1 ] && { convert_flac; printf '\n'; }
-  [ "$CP_IPOD" -eq 1 ] || [ "$CP_FLAC" -eq 1 ] && { copy_files; printf '\n'; }
-  [ "$COVER_PROCESS" -eq 1 ] && { cover_processor; printf '\n'; }
-  log_success "All done!"
-}
-
-log_standard() {
-  color="$1"
-  shift
-  printf '%b%s%b' "$color" "$1" "$COLOR_RESET"
-  shift
-  [ "$#" -gt 0 ] && printf ' %s' "$@"; printf '\n'
-}
-
-log_success() { log_standard "$COLOR_SUCCESS" "$@"; }
-
-log_info() { log_standard "$COLOR_INFO" "$@"; }
-
-log_error() { { log_standard "$COLOR_ERROR" "$@"; } >&2; }
-
-cleanup_tmp_files() { rm -f /tmp/mm_abcde.* /tmp/mm_cover.* || true; }
-
 print_help() {
   cat <<EOF
 Shell script for managing audio files. It can rip CDs, convert WAV to FLAC,
 convert WAV/FLAC to AAC, copy or move files, and process cover images into
 an 'artist/album' directory structure.
+By default converts and copies files.
 
 Usage:
   $(basename "$0") [options] src-dir <SRC> ipod-dir <IPOD_DIR> flac-dir <FLAC_DIR>
@@ -95,7 +68,7 @@ Options:
   no-flac        Skip FLAC conversions
   no-copy-ipod   Don't copy or move files to IPOD_DIR
   no-copy-flac   Don't copy or move files to FLAC_DIR
-  rip            Rip CD into "SRC/$RIP_FOLDER" before any other operation
+  rip            Rip CD into "SRC/$RIP_CD_FOLDER" before any other operation
   keep-va        Prevent renaming "Various Artists" folder to "Compilations"
   cover          Scan SRC for cover images (cover.png/jpg/jpeg), generate a
                  200x200 "cover_ipod.jpg", resize originals larger than
@@ -112,7 +85,47 @@ Dependencies:
 EOF
 }
 
-parse_arguments() {
+__log_color() {
+  color="$1"
+  shift
+  printf '%b%s%b ' "$color" "$1" "$COLOR_RESET"
+  shift
+  [ "$#" -gt 0 ] && printf ' %s' "$@"
+}
+
+log_success() { __log_color "$COLOR_SUCCESS" "$@"; }
+
+log_info() { __log_color "$COLOR_INFO" "$@"; }
+
+log_error() { { __log_color "$COLOR_ERROR" "$@"; } >&2; }
+
+readc() {
+  # Reads one character from user input
+  # Source: https://unix.stackexchange.com/a/464963
+  # Usage: readc <variable-name>
+
+  if [ -t 0 ]; then
+    saved_tty_settings=$(stty -g)
+    stty -icanon min 1 time 0 -echo
+  fi
+  eval "$1="
+  while
+    c=$(dd bs=1 count=1 2> /dev/null; echo .)
+    c=${c%.}
+    [ -n "$c" ] &&
+      eval "$1=\${$1}"'$c
+        [ "$(($(printf '%s' "${'"$1"'}" | wc -m)))" -eq 0 ]'; do
+    continue
+  done
+  # get ascii representation of input
+  input_clean=$(eval "printf '%s' \"\$$1\"" | od -An -v -t a | tr -d '[:space:]')
+  eval "$1=\"$input_clean\""
+  [ -t 0 ] && stty "$saved_tty_settings"
+}
+
+cleanup_tmp_files() { rm -f /tmp/mm_abcde.* /tmp/mm_cover.* || true; }
+
+parse_parameters() {
   [ "$#" -eq 0 ] && { log_error "Error: too few arguments"; print_help; exit 1; }
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -156,50 +169,50 @@ parse_arguments() {
   FLAC_DIR=$(realpath "$FLAC_DIR")/
 }
 
-check_dependencies() {
-  missing_dep=0
-  for cmd in parallel abcde ffmpeg magick; do
-    command -v "$cmd" >/dev/null 2>&1 || { log_error "Error: $cmd is not installed"; missing_dep=1; }
-  done
+check_dependency() {
+  # Checks if a command is available. Returns 1 if at least one is missing, 0 otherwise.
+  # Usage: check_dependency "command" ["command" ...]
 
-  if [ -z "$AAC_ENCODER_PATH" ]; then
-    log_error "Error: AAC_ENCODER_PATH is empty"
-    missing_dep=1
-  elif [ -e "$AAC_ENCODER_PATH" ]; then
-    # check if AAC_ENCODER_PATH is a windows executable
-    if head -c 2 "$AAC_ENCODER_PATH" 2>/dev/null | grep -q '^MZ'; then
-      command -v wine >/dev/null 2>&1 || { log_error "Error: wine is required by the AAC encoder but is not installed"; missing_dep=1; }
-      AAC_ENCODER_USE_WINE=1
-    elif [ ! -x "$AAC_ENCODER_PATH" ]; then
-      log_error "Error: AAC encoder at \"$AAC_ENCODER_PATH\" is not executable"
+  missing_dep=0
+  for cmd in "$@"; do
+    var_name=""
+    if eval 'value=${'${cmd}'#}' 2>/dev/null; then eval "var_name=\$$cmd"
+    else var_name="$cmd"
+    fi
+    if [ -f "$var_name" ] && head -c 2 "$var_name" 2>/dev/null | grep -q '^MZ'; then
+      if ! command -v wine >/dev/null 2>&1; then
+        log_error "Error: wine is required by $cmd but is not installed"
+        missing_dep=1
+        continue
+      fi
+      var_name=$(echo "$var_name" | tr '[:lower:]' '[:upper:]')
+      eval "${var_name}_USE_WINE=1"
+    elif ! command -v "$cmd" >/dev/null 2>&1; then
+      log_error "Error: $cmd is not installed"
       missing_dep=1
     fi
-  elif ! command -v "$AAC_ENCODER_PATH" >/dev/null 2>&1; then
-    log_error "Error: $AAC_ENCODER_PATH can't be found or executed"
-    missing_dep=1
-  fi
-
-  [ "$missing_dep" -eq 1 ] && exit 1
+  done
+  printf '%s' "$missing_dep"
 }
 
 get_target_path() {
   # Returns target directory in 'artist/album' format.
-  # Usage: target_path=$(get_target_path "file" "base_directory")
+  # Usage: get_target_path "file" "base_directory"
 
   artist=$(basename "$(dirname "$(dirname "$1")")")
   [ "$KEEP_VA" -eq 0 ] && [ "$(echo "$artist" | tr '[:upper:]' '[:lower:]')" = "various artists" ] && artist="Compilations"
   album=$(basename "$(dirname "$1")")
 
-  target="$2"
-  [ "$artist" != "." ] && [ "$artist" != "/" ] && target="$target$artist/"
-  [ "$album" != "." ] && [ "$album" != "/" ] && target="$target$album/"
-
-  printf '%s' "$target"
+  result="$2"
+  [ "$artist" != "." ] && [ "$artist" != "/" ] && result="$result$artist/"
+  [ "$album" != "." ] && [ "$album" != "/" ] && result="$result$album/"
+  printf '%s' "$result"
 }
 
 convert_ipod() {
-  export COLOR_INFO COLOR_RESET AAC_ENCODER_PATH AAC_ENCODER_OPTIONS AAC_ENCODER_USE_WINE AAC_ENCODER_WINE
+  [ "$(check_dependency "$ENCODER_AAC parallel")" -eq 1 ] && { log_info "Skipping AAC conversion due to missing dependencies"; return 1; }
 
+  export COLOR_INFO COLOR_RESET ENCODER_AAC ENCODER_AAC_OPTIONS ENCODER_AAC_USE_WINE ENCODER_WINE
   find "$SRC_DIR" \( -iname "*.wav" -o -iname "*.flac" \) -type f \
   | while IFS= read -r file; do
     [ -e "${file%.*}.m4a" ] && continue
@@ -210,17 +223,18 @@ convert_ipod() {
     dest_dir={1}
     file={2}
     printf '%b' "${COLOR_INFO}Converting audio${COLOR_RESET} \"$file\"\n"
-    if [ "$AAC_ENCODER_USE_WINE" -eq 1 ]; then
-      '"$AAC_ENCODER_WINE"' "$AAC_ENCODER_PATH" '"$AAC_ENCODER_OPTIONS"' -d "$dest_dir" "$file"
+    if [ "$ENCODER_AAC_USE_WINE" -eq 1 ]; then
+      '"$ENCODER_WINE"' "$ENCODER_AAC" '"$ENCODER_AAC_OPTIONS"' -d "$dest_dir" "$file"
     else
-      "$AAC_ENCODER_PATH" '"$AAC_ENCODER_OPTIONS"' -d "$dest_dir" "$file"
+      "$ENCODER_AAC" '"$ENCODER_AAC_OPTIONS"' -d "$dest_dir" "$file"
     fi
   '
 }
 
 convert_flac() {
-  export COLOR_INFO COLOR_RESET FFMPEG_PATH FFMPEG_GLOBAL_OPTIONS
+  [ "$(check_dependency "$ENCODER_FLAC parallel")" -eq 1 ] && { log_info "Skipping FLAC conversion due to missing dependencies"; return 1; }
 
+  export COLOR_INFO COLOR_RESET ENCODER_FLAC ENCODER_FLAC_OPTIONS ENCODER_FLAC_USE_WINE ENCODER_WINE
   find "$SRC_DIR" -iname "*.wav" -type f \
   | while IFS= read -r file; do
     [ -e "${file%.*}.flac" ] && continue
@@ -231,7 +245,11 @@ convert_flac() {
     dest_dir={1}
     file={2}
     printf '%b' "${COLOR_INFO}Converting audio${COLOR_RESET} \"$file\"\n"
-    "$FFMPEG_PATH" '"$FFMPEG_GLOBAL_OPTIONS"' -i "$file" -c:a flac -compression_level 12 "$dest_dir"
+    if [ "$ENCODER_FLAC_USE_WINE" -eq 1 ]; then
+      '"$ENCODER_WINE"' "$ENCODER_FLAC" '"$ENCODER_FLAC_OPTIONS"' -i "$file" -c:a flac -compression_level 12 "$dest_dir"
+    else
+      "$ENCODER_FLAC" '"$ENCODER_FLAC_OPTIONS"' -i "$file" -c:a flac -compression_level 12 "$dest_dir"
+    fi
   '
 }
 
@@ -286,21 +304,21 @@ copy_files() {
 }
 
 rip_cd() {
-  log_info "Ripping CD to \"${SRC_DIR}${RIP_FOLDER}\" ..."
+  [ "$(check_dependency abcde)" -eq 1 ] && exit 1
 
-  ABCDE_CONF_FILE=$(mktemp /tmp/mm_abcde.XXXXXX.conf)
-  write_abcde_conf
-  printf "OUTPUTDIR=\"${SRC_DIR}${RIP_FOLDER}\"" >>"$ABCDE_CONF_FILE"
+  conf_file=$(mktemp /tmp/mm_abcde.XXXXXX.conf)
+  write_abcde_conf "$conf_file"
+  printf '%s' "OUTPUTDIR=\"${SRC_DIR}${RIP_CD_FOLDER}\"" >>"$conf_file"
 
-  abcde -c "$ABCDE_CONF_FILE"
+  log_info "Ripping CD to \"${SRC_DIR}${RIP_CD_FOLDER}\" ..."
+  abcde -c "$conf_file"
   rip_status=$?
   [ "$rip_status" -ne 0 ] && { log_error "Error: CD rip failed"; exit 1; }
-
   log_success "CD ripped successfully!"
 }
 
 write_abcde_conf() {
-  tee "$ABCDE_CONF_FILE" <<'EOF' >/dev/null
+  tee "$1" <<'EOF' >/dev/null
 LOWDISK=y
 EXTRAVERBOSE=2
 EJECTCD=y
@@ -326,6 +344,8 @@ EOF
 }
 
 cover_processor() {
+  [ "$(check_dependency magick)" -eq 1 ] && { log_info "Skipping cover processing due to missing dependencies"; return 1; }
+
   tmp_image=$(mktemp /tmp/mm_cover.XXXXXX.jpg)
   find "$SRC_DIR" \( -iname '*cover.png' -o -iname '*cover.jpg' -o -iname '*cover.jpeg' \) -type f \
   | while IFS= read -r file; do
@@ -345,12 +365,24 @@ cover_processor() {
         log_info "Resizing cover" "\"$file\""
         magick_opts="-resize ${COVER_DIM}> -strip"
         [ "$(wc -c < "$file")" -gt 1048576 ] && magick_opts="$magick_opts -quality $COVER_CONVERT_QUALITY"
-        magick "$file" $magick_opts "$tmp_image"
+        magick "$file" "$magick_opts" "$tmp_image"
         cp --update "$tmp_image" "$file"
         ;;
     esac
   done
 }
 
+# ==============
+# ===  MAIN  ===
+# ==============
+
 trap cleanup_tmp_files EXIT INT TERM
-main "$@"
+parse_parameters "$@"
+[ "$RIP_CD" -eq 1 ] && { rip_cd; printf '\n'; }
+[ "$CONV_IPOD" -eq 1 ] || [ "$CONV_FLAC" -eq 1 ] || [ "$CP_FLAC" -eq 1 ] || [ "$CP_IPOD" -eq 1 ] || [ "$COVER_PROCESS" -eq 1 ] && log_info "Scanning directory..."
+[ "$CONV_IPOD" -eq 1 ] && { convert_ipod; printf '\n'; }
+[ "$CONV_FLAC" -eq 1 ] && { convert_flac; printf '\n'; }
+[ "$CP_IPOD" -eq 1 ] || [ "$CP_FLAC" -eq 1 ] && { copy_files; printf '\n'; }
+[ "$COVER_PROCESS" -eq 1 ] && { cover_processor; printf '\n'; }
+log_success "All done!"
+exit 0

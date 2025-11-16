@@ -88,9 +88,9 @@ EOF
 __log_color() {
   color="$1"
   shift
-  printf '%b%s%b ' "$color" "$1" "$COLOR_RESET"
+  printf '%b%s%b' "$color" "$1" "$COLOR_RESET"
   shift
-  [ "$#" -gt 0 ] && printf ' %s' "$@"
+  [ "$#" -gt 0 ] && printf ' %s' "$@"; printf '\n'
 }
 
 log_success() { __log_color "$COLOR_SUCCESS" "$@"; }
@@ -171,13 +171,14 @@ parse_parameters() {
 
 check_dependency() {
   # Checks if a command is available. Returns 1 if at least one is missing, 0 otherwise.
+  # Also accepts variable names containing command paths.
   # Usage: check_dependency "command" ["command" ...]
 
   missing_dep=0
   for cmd in "$@"; do
     var_name=""
     if eval 'value=${'${cmd}'#}' 2>/dev/null; then eval "var_name=\$$cmd"
-    else var_name="$cmd"
+    else var_name="\$$cmd"
     fi
     if [ -f "$var_name" ] && head -c 2 "$var_name" 2>/dev/null | grep -q '^MZ'; then
       if ! command -v wine >/dev/null 2>&1; then
@@ -210,7 +211,7 @@ get_target_path() {
 }
 
 convert_ipod() {
-  [ "$(check_dependency "$ENCODER_AAC parallel")" -eq 1 ] && { log_info "Skipping AAC conversion due to missing dependencies"; return 1; }
+  [ "$(check_dependency ENCODER_AAC parallel)" -eq 1 ] && { log_info "Skipping AAC conversion due to missing dependencies"; return 1; }
 
   export COLOR_INFO COLOR_RESET ENCODER_AAC ENCODER_AAC_OPTIONS ENCODER_AAC_USE_WINE ENCODER_WINE
   find "$SRC_DIR" \( -iname "*.wav" -o -iname "*.flac" \) -type f \
@@ -232,7 +233,7 @@ convert_ipod() {
 }
 
 convert_flac() {
-  [ "$(check_dependency "$ENCODER_FLAC parallel")" -eq 1 ] && { log_info "Skipping FLAC conversion due to missing dependencies"; return 1; }
+  [ "$(check_dependency ENCODER_FLAC parallel)" -eq 1 ] && { log_info "Skipping FLAC conversion due to missing dependencies"; return 1; }
 
   export COLOR_INFO COLOR_RESET ENCODER_FLAC ENCODER_FLAC_OPTIONS ENCODER_FLAC_USE_WINE ENCODER_WINE
   find "$SRC_DIR" -iname "*.wav" -type f \
@@ -304,7 +305,7 @@ copy_files() {
 }
 
 rip_cd() {
-  [ "$(check_dependency abcde)" -eq 1 ] && exit 1
+  [ "$(check_dependency abcde)" -eq 1 ] && { log_info "Skipping CD rip due to missing dependencies"; return 1; }
 
   conf_file=$(mktemp /tmp/mm_abcde.XXXXXX.conf)
   write_abcde_conf "$conf_file"

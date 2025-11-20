@@ -102,7 +102,7 @@ log_info() { __log_color "$COLOR_INFO" "$@"; }
 log_error() { { __log_color "$COLOR_ERROR" "$@"; } >&2; }
 
 readc() {
-  # Reads one character from user input
+  # Reads one character from user input and converts it to its ASCII representation.
   # Source: https://unix.stackexchange.com/a/464963
   # Usage: readc <variable-name>
 
@@ -125,7 +125,7 @@ readc() {
   [ -t 0 ] && stty "$saved_tty_settings"
 }
 
-cleanup_tmp_files() { rm -f /tmp/mm_abcde.* /tmp/mm_cover.* || true; }
+cleanup_tmp_files() { rm -f /tmp/mm_abcde.* /tmp/mm_cover.* 2>/dev/null; }
 
 parse_parameters() {
   [ "$#" -eq 0 ] && { log_error "Error: too few arguments"; print_help; exit 1; }
@@ -177,40 +177,6 @@ check_dependency() {
   # Usage: check_dependency command [command ...]
 
   missing_dep=0
-  for input in "$@"; do
-    item_to_check=""
-    display_name="$input"
-    if (eval 'value=${'${input}'#}' 2>/dev/null); then
-      eval "item_to_check=\$$input"
-    else
-      item_to_check="$input"
-    fi
-    if [ -f "$item_to_check" ]; then
-      if head -c 2 "$item_to_check" 2>/dev/null | grep -q '^MZ'; then
-        if ! command -v wine >/dev/null 2>&1; then
-          log_error "Error: wine is required by $item_to_check but is not installed"
-          missing_dep=1
-        fi
-        display_name="$(echo "$display_name" | tr '[:lower:]' '[:upper:]')_USE_WINE"
-        eval "$display_name=1"
-      elif [ ! -x "$item_to_check" ]; then
-        log_error "Error: $item_to_check exists but is not an executable file"
-        missing_dep=1
-      fi
-    elif ! command -v "$item_to_check" >/dev/null 2>&1; then
-      log_error "Error: $display_name is not installed"
-      missing_dep=1
-    fi
-  done
-  printf '%s' "$missing_dep"
-}
-
-check_dependency() {
-  # Checks if a command is available. Returns 1 if at least one is missing, 0 otherwise.
-  # Also accepts variable names containing command paths.
-  # Usage: check_dependency command [command ...]
-
-  missing_dep=0
   for cmd in "$@"; do
     display_name="$cmd"
     item_to_check=""
@@ -232,7 +198,7 @@ check_dependency() {
       missing_dep=1
     fi
   done
-  printf '%s' "$missing_dep"
+  return "$missing_dep"
 }
 
 get_target_path() {
@@ -250,7 +216,7 @@ get_target_path() {
 }
 
 convert_ipod() {
-  [ $(check_dependency ENCODER_AAC parallel) -eq 1 ] && { log_info "Skipping AAC conversion due to missing dependencies"; return 1; }
+  ! check_dependency ENCODER_AAC parallel && { log_info "Skipping AAC conversion due to missing dependencies"; return 1; }
   export COLOR_INFO COLOR_RESET ENCODER_AAC ENCODER_AAC_OPTIONS ENCODER_AAC_USE_WINE ENCODER_WINE
   find "$SRC_DIR" \( -iname "*.wav" -o -iname "*.flac" \) -type f \
   | while IFS= read -r file; do
@@ -271,7 +237,7 @@ convert_ipod() {
 }
 
 convert_flac() {
-  [ $(check_dependency ENCODER_FLAC parallel) -eq 1 ] && { log_info "Skipping FLAC conversion due to missing dependencies"; return 1; }
+  ! check_dependency ENCODER_FLAC parallel && { log_info "Skipping FLAC conversion due to missing dependencies"; return 1; }
   export COLOR_INFO COLOR_RESET ENCODER_FLAC ENCODER_FLAC_OPTIONS ENCODER_FLAC_USE_WINE ENCODER_WINE
   find "$SRC_DIR" -iname "*.wav" -type f \
   | while IFS= read -r file; do
@@ -300,7 +266,7 @@ copy_files() {
           target_path=$(get_target_path "$file" "$IPOD_DIR")
           mkdir -p "$target_path"
           log_info "Moving ipod" "\"$file\" -> \"$target_path\""
-          mv --update "$file" "$target_path"
+          mv "$file" "$target_path"
           continue
         fi
         ;;
@@ -310,10 +276,10 @@ copy_files() {
           mkdir -p "$target_path"
           if [ -e "${file%.*}.wav" ]; then
             log_info "Moving flac" "\"$file\" -> \"$target_path\""
-            mv --update "$file" "$target_path"
+            mv "$file" "$target_path"
           else
             log_info "Copying flac" "\"$file\" -> \"$target_path\""
-            cp --update "$file" "$target_path"
+            cp "$file" "$target_path"
           fi
           continue
         fi
@@ -327,7 +293,7 @@ copy_files() {
       mkdir -p "$target_path"
       if [ ! -e "${target_path}${file_basename%.*}.*" ]; then
         log_info "Copying ipod" "\"$file\" -> \"$target_path\""
-        cp --update "$file" "$target_path"
+        cp "$file" "$target_path"
       fi
     fi
     if [ "$CP_FLAC" -eq 1 ]; then
@@ -335,14 +301,14 @@ copy_files() {
       mkdir -p "$target_path"
       if [ ! -e "${target_path}${file_basename%.*}.*" ]; then
         log_info "Copying flac" "\"$file\" -> \"$target_path\""
-        cp --update "$file" "$target_path"
+        cp "$file" "$target_path"
       fi
     fi
   done
 }
 
 rip_cd() {
-  [ $(check_dependency abcde) -eq 1 ] && { log_info "Skipping CD rip due to missing dependencies"; return 1; }
+  ! check_dependency abcde && { log_info "Skipping CD rip due to missing dependencies"; return 1; }
   conf_file=$(mktemp /tmp/mm_abcde.XXXXXX.conf)
   write_abcde_conf "$conf_file"
   printf '%s' "OUTPUTDIR=\"${SRC_DIR}${RIP_CD_FOLDER}\"" >>"$conf_file"
@@ -381,7 +347,7 @@ EOF
 }
 
 cover_processor() {
-  [ $(check_dependency magick) -eq 1 ] && { log_info "Skipping cover processing due to missing dependencies"; return 1; }
+  ! check_dependency magick && { log_info "Skipping cover processing due to missing dependencies"; return 1; }
   tmp_image=$(mktemp /tmp/mm_cover.XXXXXX.jpg)
   find "$SRC_DIR" \( -iname '*cover.png' -o -iname '*cover.jpg' -o -iname '*cover.jpeg' \) -type f \
   | while IFS= read -r file; do
@@ -402,7 +368,7 @@ cover_processor() {
         magick_opts="-resize ${COVER_DIM}> -strip"
         [ "$(wc -c < "$file")" -gt 1048576 ] && magick_opts="$magick_opts -quality $COVER_CONVERT_QUALITY"
         magick "$file" "$magick_opts" "$tmp_image"
-        cp --update "$tmp_image" "$file"
+        cp "$tmp_image" "$file"
         ;;
     esac
   done
@@ -415,7 +381,11 @@ cover_processor() {
 trap cleanup_tmp_files EXIT INT TERM
 parse_parameters "$@"
 [ "$RIP_CD" -eq 1 ] && { rip_cd && printf '\n'; }
-[ "$CONV_IPOD" -eq 1 ] || [ "$CONV_FLAC" -eq 1 ] || [ "$CP_FLAC" -eq 1 ] || [ "$CP_IPOD" -eq 1 ] || [ "$COVER_PROCESS" -eq 1 ] && log_info "Scanning directory..."
+
+[ "$CONV_IPOD" -eq 1 ] || [ "$CONV_FLAC" -eq 1 ] || \
+[ "$CP_FLAC" -eq 1 ] || [ "$CP_IPOD" -eq 1 ] || \
+[ "$COVER_PROCESS" -eq 1 ] && log_info "Scanning directory..."
+
 [ "$CONV_IPOD" -eq 1 ] && { convert_ipod && printf '\n'; }
 [ "$CONV_FLAC" -eq 1 ] && { convert_flac && printf '\n'; }
 [ "$CP_IPOD" -eq 1 ] || [ "$CP_FLAC" -eq 1 ] && { copy_files && printf '\n'; }

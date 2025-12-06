@@ -359,7 +359,7 @@ cover_processor() {
     case "${file##*.}" in
       png|PNG)
         log_info "Converting cover" "\"$file\""
-        magick "$file" -resize "${COVER_DIM}>" -strip -quality "$COVER_CONVERT_QUALITY" "$tmp_image"
+        magick "$file" -resize "${COVER_DIM}>" -strip -quality $COVER_CONVERT_QUALITY "$tmp_image"
         cp "$tmp_image" "${file%.*}.jpg"
         rm -f "$file"
         ;;
@@ -367,7 +367,7 @@ cover_processor() {
         log_info "Resizing cover" "\"$file\""
         magick_opts="-resize ${COVER_DIM}> -strip"
         [ "$(wc -c < "$file")" -gt 1048576 ] && magick_opts="$magick_opts -quality $COVER_CONVERT_QUALITY"
-        magick "$file" "$magick_opts" "$tmp_image"
+        magick "$file" $magick_opts "$tmp_image"
         cp "$tmp_image" "$file"
         ;;
     esac

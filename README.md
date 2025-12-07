@@ -1,6 +1,10 @@
 # Audio Management Scripts
 
 A collection of shell scripts I use to manage my music library.
+<br>
+Completions are also available (currently only for zsh). You can install them by running `install-completions`.
+<br>
+Run `install-completions help` to get more information.
 
 ## Scripts
 
@@ -21,10 +25,10 @@ Feature rich script that does most of the jobs.
 **Options:**
 - `no-ipod` - Skip AAC conversions
 - `no-flac` - Skip FLAC conversions
-- `no-copy-ipod` - Don't copy or move files to IPOD_DIR
-- `no-copy-flac` - Don't copy or move files to FLAC_DIR
-- `rip` - Rip CD into "SRC/mm_cd_rip" before other operations
-- `keep-va` - Keep "Various Artists" folder name (default: rename to "Compilations")
+- `no-copy-ipod` - Don't copy or move files to _IPOD_DIR_
+- `no-copy-flac` - Don't copy or move files to _FLAC_DIR_
+- `rip` - Rip CD into "_SRC/mm_cd_rip_" before other operations
+- `keep-va` - Don't rename "_Various Artists_" folder to "_Compilations_"
 - `cover` - Process cover images in the source directory
 - `help` - Show help message
 
@@ -39,7 +43,7 @@ Adapts playlists created by iTunes for RockBox compatibility and viceversa.
 **Usage:** `playlistAdaptor mode file`
 
 **Options:**
-- `mode` - Conversion mode, accepts values 'itunes' (converts for iPod) or 'ipod' (converts for iTunes)
+- `mode` - Conversion mode, accepts values _itunes_ (converts for iPod) or _ipod_ (converts for iTunes)
 - `file` - Path to a playlist file or a directory containing playlist files
 
 ---

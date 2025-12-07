@@ -1,0 +1,82 @@
+#!/bin/sh
+
+COLOR_RESET='\033[0m'
+COLOR_GREEN='\033[32m'
+COLOR_YELLOW='\033[33m'
+COLOR_RED='\033[31m'
+
+SCRIPT_DIR=$(realpath "$(dirname "$0")")
+COMP_DIR="${SCRIPT_DIR}/completions"
+ZSH_COMP_DIR="${HOME}/.zsh/completions"
+
+print_help() {
+  cat <<EOF
+Usage:
+  $(basename "$0") [options]
+
+Options:
+  uninstall   Remove installed completions
+  help        Show this help message
+EOF
+}
+
+install_zsh() {
+  printf '%s\n' "Installing zsh completions..."
+  mkdir -p "$ZSH_COMP_DIR"
+
+  found=0
+  for src in "$COMP_DIR"/_*; do
+    [ ! -f "$src" ] && continue
+    found=1
+    dest="${ZSH_COMP_DIR}/$(basename "$src")"
+    rm -f "$dest"
+    cp "$src" "$dest"
+    printf '%b\n' "${COLOR_GREEN}COPY${COLOR_RESET} $src => $dest"
+  done
+
+  if [ "$found" -eq 0 ]; then printf '%s\n' "No completion files found."
+  else printf '%b\n' "${COLOR_YELLOW}Instructions${COLOR_RESET}" && print_zsh_instructions
+  fi
+}
+
+print_zsh_instructions() {
+  cat <<EOF
+Add these lines to your zshrc:
+
+  fpath=("$ZSH_COMP_DIR" \$fpath)
+  autoload -Uz compinit && compinit
+
+Then relaunch your terminal or run:
+
+  rm -f ~/.zcompdump && source ~/.zshrc
+
+EOF
+}
+
+uninstall() {
+  printf '%s\n' "Removing completions..."
+
+  found=0
+  for src in "$COMP_DIR"/_*; do
+    [ ! -f "$src" ] && continue
+    dest="${ZSH_COMP_DIR}/$(basename "$src")"
+    if [ -L "$dest" ] || [ -f "$dest" ]; then
+      rm -f "$dest"
+      printf '%b\n' "${COLOR_RED}REMOVE${COLOR_RESET} $dest"
+      found=1
+    fi
+  done
+
+  [ "$found" -eq 0 ] && printf '%s\n' "No completion files found to remove."
+}
+
+if [ "$#" -gt 0 ]; then
+  case "$1" in
+    uninstall) uninstall; exit 0 ;;
+    help) print_help; exit 0 ;;
+    *) printf '%s\n' "Unknown option: $1"; exit 1 ;;
+  esac
+fi
+
+install_zsh
+printf '%s\n' "Installation completed!"

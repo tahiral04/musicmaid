@@ -1,0 +1,50 @@
+#compdef musicMaid
+
+_musicMaid() {
+  local context state state_descr line
+  typeset -A opt_args
+
+  _arguments -C \
+    '*: :->args'
+
+  case $state in
+    args)
+      case $words[CURRENT-1] in
+        src-dir|ipod-dir|flac-dir)
+          _files -/
+          return
+          ;;
+      esac
+      
+      local -a opts
+      opts=(
+        'help:Show help message and exit'
+        'no-ipod:Skip AAC conversions'
+        'no-flac:Skip FLAC conversions'
+        'no-copy-ipod:Do not copy or move files to IPOD_DIR'
+        'no-copy-flac:Do not copy or move files to FLAC_DIR'
+        'rip:Rip CD before any other operation'
+        'keep-va:Prevent renaming "Various Artists" to "Compilations"'
+        'cover:Process cover images'
+        'src-dir:Source directory for audio files'
+        'ipod-dir:Destination directory for AAC files'
+        'flac-dir:Destination directory for FLAC files'
+      )
+      
+      local -a available_opts
+      local -a used_words
+      used_words=(${words[1,CURRENT-1]})
+      
+      for opt_str in "${opts[@]}"; do
+        local opt_name="${opt_str%%:*}"
+        if [[ ${used_words[(I)$opt_name]} -eq 0 ]]; then
+          available_opts+=("$opt_str")
+        fi
+      done
+
+      _describe 'command' available_opts
+      ;;
+  esac
+}
+
+_musicMaid "$@"

@@ -352,9 +352,11 @@ cover_processor() {
   find "$SRC_DIR" \( -iname '*cover.png' -o -iname '*cover.jpg' -o -iname '*cover.jpeg' \) -type f \
   | while IFS= read -r file; do
 
-    log_info "Creating cover" "\"${file%.*}_ipod.jpg\""
-    magick "$file" -thumbnail "${COVER_DIM_IPOD}>" "$tmp_image"
-    cp "$tmp_image" "${file%.*}_ipod.jpg"
+    if [ ! -e "${file%.*}_ipod.jpg" ]; then
+      log_info "Creating cover" "\"${file%.*}_ipod.jpg\""
+      magick "$file" -thumbnail "${COVER_DIM_IPOD}>" "$tmp_image"
+      cp "$tmp_image" "${file%.*}_ipod.jpg"
+    fi
 
     case "${file##*.}" in
       png|PNG)

@@ -53,29 +53,22 @@ an 'artist/album' directory structure.
 By default converts and copies files.
 
 Usage:
-  $(basename "$0") [options] src-dir <SRC> ipod-dir <IPOD_DIR> flac-dir <FLAC_DIR>
+  $(basename "$0") [options] <source> [ipod-dir] [flac-dir]
 
-  src-dir        Source directory. Can be omitted when 'no-ipod', 'no-flac',
-                 'no-copy-ipod', 'no-copy-flac' are set and 'rip' or 'cover'
-                 are not used
-  ipod-dir       Destination directory for AAC files. Defaults to SRC if
-                 not provided or 'no-copy-ipod' is set
-  flac-dir       Destination directory for FLAC files. Defaults to SRC if
-                 not provided or 'no-copy-flac' is set
+Arguments:
+  source         Source directory with audio files and structure
+  ipod-dir       Destination directory for AAC files (defaults to source)
+  flac-dir       Destination directory for FLAC files (defaults to source)
 
 Options:
-  help           Show this help message and exit
-  no-ipod        Skip AAC conversions
-  no-flac        Skip FLAC conversions
-  no-copy-ipod   Don't copy or move files to IPOD_DIR
-  no-copy-flac   Don't copy or move files to FLAC_DIR
-  rip            Rip CD into "SRC/$RIP_CD_FOLDER" before any other operation
-  keep-va        Prevent renaming "Various Artists" folder to "Compilations"
-  cover          Scan SRC for cover images (cover.png/jpg/jpeg), generate a
-                 200x200 "cover_ipod.jpg", resize originals larger than
-                 1500x1500, convert PNGs to JPG, recompress JPGs above
-                 1 MiB, and strip all metadata. The processed files replace
-                 the originals
+  -h, --help              Show this help message and exit
+  -r, --rip               Rip CD into "source/$RIP_CD_FOLDER" before operations
+  -c, --cover             Process cover images (resize, convert, compress)
+  -v, --keep-va           Don't rename "Various Artists" to "Compilations"
+  -i, --ipod              Skip AAC conversions
+  -f, --flac              Skip FLAC conversions
+  --cp-ipod               Don't copy or move files to ipod-dir
+  --cp-flac               Don't copy or move files to flac-dir
 
 Dependencies:
   GNU Parallel   Parallel file conversion
@@ -128,24 +121,27 @@ readc() {
 cleanup_tmp_files() { rm -f /tmp/mm_abcde.* /tmp/mm_cover.* 2>/dev/null; }
 
 parse_parameters() {
-  [ "$#" -eq 0 ] && { log_error "Error: too few arguments"; print_help; exit 1; }
+  [ "$#" -eq 0 ] && { log_error "Error: too few arguments"; exit 1; }
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      help) print_help; exit 0 ;;
-      no-ipod) CONV_IPOD=0 ;;
-      no-flac) CONV_FLAC=0 ;;
-      no-copy-ipod) CP_IPOD=0 ;;
-      no-copy-flac) CP_FLAC=0 ;;
-      rip) RIP_CD=1 ;;
-      keep-va) KEEP_VA=1 ;;
-      cover) COVER_PROCESS=1 ;;
-      src-dir|ipod-dir|flac-dir)
-        var_name=$(echo "$1" | tr '-' '_' | tr '[:lower:]' '[:upper:]')
-        [ -z "$(eval echo \$$var_name)" ] && { shift; eval "$var_name"='"$1"'; }
+      -h|--help) print_help; exit 0 ;;
+      -i|--ipod) CONV_IPOD=0; shift ;;
+      -f|--flac) CONV_FLAC=0; shift ;;
+      --cp-ipod) CP_IPOD=0; shift ;;
+      --cp-flac) CP_FLAC=0; shift ;;
+      -r|--rip) RIP_CD=1; shift ;;
+      -v|--keep-va) KEEP_VA=1; shift ;;
+      -c|--cover) COVER_PROCESS=1; shift ;;
+      --*|-*) log_error "Error: unknown option $1"; exit 1 ;;
+      *)
+        if [ -z "$SRC_DIR" ]; then SRC_DIR="$1"
+        elif [ -z "$IPOD_DIR" ]; then IPOD_DIR="$1"
+        elif [ -z "$FLAC_DIR" ]; then FLAC_DIR="$1"
+        else { log_error "Error: too many arguments"; exit 1; }
+        fi
+        shift
         ;;
-      *) log_error "Error: unknown option $1"; exit 1 ;;
     esac
-    shift
   done
 
   # check SRC and DEST are valid (see help text)
@@ -260,9 +256,12 @@ convert_flac() {
 copy_files() {
   find "$SRC_DIR" \( -iname "*.m4a" -o -iname "*.mp3" -o -iname "*.flac" \) -type f \
   | while IFS= read -r file; do
-    case "${file##*.}" in
+    case "$(echo "${file##*.}" | tr '[:upper:]' '[:lower:]')" in
       m4a|mp3)
-        if [ "$CP_IPOD" -eq 1 ] && { [ -e "${file%.*}.wav" ] || [ -e "${file%.*}.flac" ]; }; then
+        if [ "$CP_IPOD" -eq 1 ] && { \
+        [ -e "${file%.*}.wav" ] || [ -e "${file%.*}.WAV" ] || \
+        [ -e "${file%.*}.flac" ] || [ -e "${file%.*}.FLAC" ]; \
+        }; then
           target_path=$(get_target_path "$file" "$IPOD_DIR")
           mkdir -p "$target_path"
           log_info "Moving ipod" "\"$file\" -> \"$target_path\""
@@ -271,36 +270,32 @@ copy_files() {
         fi
         ;;
       flac)
-        if [ "$CP_FLAC" -eq 1 ]; then
+        if [ "$CP_FLAC" -eq 1 ] && { [ -e "${file%.*}.wav" ] || [ -e "${file%.*}.WAV" ]; }; then
           target_path=$(get_target_path "$file" "$FLAC_DIR")
           mkdir -p "$target_path"
-          if [ -e "${file%.*}.wav" ]; then
-            log_info "Moving flac" "\"$file\" -> \"$target_path\""
-            mv "$file" "$target_path"
-          else
-            log_info "Copying flac" "\"$file\" -> \"$target_path\""
-            cp "$file" "$target_path"
-          fi
+          log_info "Moving flac" "\"$file\" -> \"$target_path\""
+          mv "$file" "$target_path"
           continue
         fi
         ;;
     esac
 
     # copy any file to IPOD_DIR and FLAC_DIR
-    file_basename=$(basename "$file")
+    file_no_ext=$(basename "$file")
+    file_no_ext="${file_no_ext%.*}"
     if [ "$CP_IPOD" -eq 1 ]; then
       target_path=$(get_target_path "$file" "$IPOD_DIR")
-      mkdir -p "$target_path"
-      if [ ! -e "${target_path}${file_basename%.*}.*" ]; then
+      if [ ! -e "$target_path$file_no_ext".* ]; then
         log_info "Copying ipod" "\"$file\" -> \"$target_path\""
+        mkdir -p "$target_path"
         cp "$file" "$target_path"
       fi
     fi
     if [ "$CP_FLAC" -eq 1 ]; then
       target_path=$(get_target_path "$file" "$FLAC_DIR")
-      mkdir -p "$target_path"
-      if [ ! -e "${target_path}${file_basename%.*}.*" ]; then
+      if [ ! -e "$target_path$file_no_ext".* ]; then
         log_info "Copying flac" "\"$file\" -> \"$target_path\""
+        mkdir -p "$target_path"
         cp "$file" "$target_path"
       fi
     fi

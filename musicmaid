@@ -50,7 +50,7 @@ Usage:
   $(basename "$0") [options] <source> [ipod-dir] [flac-dir]
 
 Arguments:
-  source         Source directory with audio files and structure
+  source         Source directory with the files to be processed
   ipod-dir       Destination directory for AAC files (defaults to source)
   flac-dir       Destination directory for FLAC files (defaults to source)
 
@@ -73,7 +73,7 @@ Dependencies:
 EOF
 }
 
-__log_color() {
+_log_color() {
   color="$1"
   shift
   printf '%b%s%b' "$color" "$1" "$COLOR_RESET"
@@ -82,11 +82,11 @@ __log_color() {
   printf '\n'
 }
 
-log_success() { __log_color "$COLOR_SUCCESS" "$@"; }
+log_success() { _log_color "$COLOR_SUCCESS" "$@"; }
 
-log_info() { __log_color "$COLOR_INFO" "$@"; }
+log_info() { _log_color "$COLOR_INFO" "$@"; }
 
-log_error() { { __log_color "$COLOR_ERROR" "$@"; } >&2; }
+log_error() { { _log_color "$COLOR_ERROR" "$@"; } >&2; }
 
 readc() {
   # Reads one character from user input and converts it to its ASCII representation.
@@ -112,7 +112,19 @@ readc() {
   [ -t 0 ] && stty "$saved_tty_settings"
 }
 
-cleanup_tmp_files() { rm -f /tmp/mm_abcde.* /tmp/mm_cover.* 2>/dev/null; }
+_cleanup_tmp_files() { rm -f /tmp/mm_abcde.* /tmp/mm_cover.* 2>/dev/null; }
+
+_ask_mkdir() {
+  log_info "Directory does not exist:" "$1"
+  printf '%s' "Do you want to create it? [y/N] "
+  readc ans && printf '\n'
+  if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+    mkdir -p "$1" || { log_error "Error: can't create directory \"$1\""; exit 1; }
+  else
+    log_error "Error: missing or invalid directory \"$1\""
+    exit 1
+  fi
+}
 
 parse_parameters() {
   [ "$#" -eq 0 ] && { log_error "Error: too few arguments"; exit 1; }
@@ -126,16 +138,18 @@ parse_parameters() {
       -r|--rip) RIP_CD=1; shift ;;
       -v|--keep-va) KEEP_VA=1; shift ;;
       -c|--cover) COVER_PROCESS=1; shift ;;
-      --*|-*) log_error "Error: unknown option $1"; exit 1 ;;
-      *)
-        if [ -z "$SRC_DIR" ]; then SRC_DIR="$1"
-        elif [ -z "$IPOD_DIR" ]; then IPOD_DIR="$1"
-        elif [ -z "$FLAC_DIR" ]; then FLAC_DIR="$1"
-        else { log_error "Error: too many arguments"; exit 1; }
-        fi
-        shift
-        ;;
+      -*|--*) log_error "Error: unknown option $1"; exit 1 ;;
+      *) break ;;
     esac
+  done
+
+  while [ "$#" -gt 0 ]; do
+    if [ -z "$SRC_DIR" ]; then SRC_DIR="$1"
+    elif [ -z "$IPOD_DIR" ] && { [ "$CONV_IPOD" -eq 1 ] || [ "$CP_IPOD" -eq 1 ]; }; then IPOD_DIR="$1"
+    elif [ -z "$FLAC_DIR" ] && { [ "$CONV_FLAC" -eq 1 ] || [ "$CP_FLAC" -eq 1 ]; }; then FLAC_DIR="$1"
+    else { log_error "Error: too many arguments"; exit 1; }
+    fi
+    shift
   done
 
   # check SRC and DEST are valid (see help text)
@@ -147,24 +161,18 @@ parse_parameters() {
   SRC_DIR=$(realpath "$SRC_DIR")/
 
   IPOD_DIR=${IPOD_DIR:-$SRC_DIR}
-  if [ "$CP_IPOD" -eq 1 ] && [ ! -d "$IPOD_DIR" ]; then
-    log_error "Error: missing or invalid destination directory for ipod files"
-    exit 1
-  fi
+  [ ! -d "$IPOD_DIR" ] && _ask_mkdir "$IPOD_DIR"
   IPOD_DIR=$(realpath "$IPOD_DIR")/
 
   FLAC_DIR=${FLAC_DIR:-$SRC_DIR}
-  if [ "$CP_FLAC" -eq 1 ] && [ ! -d "$FLAC_DIR" ]; then
-    log_error "Error: missing or invalid destination directory for FLAC files"
-    exit 1
-  fi
+  [ ! -d "$FLAC_DIR" ] && _ask_mkdir "$FLAC_DIR"
   FLAC_DIR=$(realpath "$FLAC_DIR")/
 }
 
-check_dependency() {
+_check_dependency() {
   # Checks if a command is available. Returns 1 if at least one is missing, 0 otherwise.
   # Also accepts variable names containing command paths.
-  # Usage: check_dependency command [command ...]
+  # Usage: _check_dependency command [command ...]
 
   missing_dep=0
   for cmd in "$@"; do
@@ -191,9 +199,9 @@ check_dependency() {
   return "$missing_dep"
 }
 
-get_target_path() {
+_get_target_path() {
   # Returns target directory in 'artist/album' format.
-  # Usage: get_target_path "file" "base_directory"
+  # Usage: _get_target_path "file" "base_directory"
 
   artist=$(basename "$(dirname "$(dirname "$1")")")
   [ "$KEEP_VA" -eq 0 ] && [ "$(echo "$artist" | tr '[:upper:]' '[:lower:]')" = "various artists" ] && artist="Compilations"
@@ -206,12 +214,12 @@ get_target_path() {
 }
 
 convert_ipod() {
-  ! check_dependency ENCODER_AAC parallel && { log_info "Skipping AAC conversion due to missing dependencies"; return 1; }
+  ! _check_dependency ENCODER_AAC parallel && { log_info "Skipping AAC conversion due to missing dependencies"; return 1; }
   export COLOR_INFO COLOR_RESET ENCODER_AAC ENCODER_AAC_OPTIONS ENCODER_AAC_USE_WINE ENCODER_WINE
   find "$SRC_DIR" \( -iname "*.wav" -o -iname "*.flac" \) -type f \
   | while IFS= read -r file; do
     [ -e "${file%.*}.m4a" ] && continue
-    target_path=$(get_target_path "$file" "$IPOD_DIR")
+    target_path=$(_get_target_path "$file" "$IPOD_DIR")
     mkdir -p "$target_path"
     printf '%s\0%s\0' "$target_path" "$file"
   done | parallel -0 -N2 -j"$THREAD_NUM" --colsep '\0' '
@@ -227,12 +235,12 @@ convert_ipod() {
 }
 
 convert_flac() {
-  ! check_dependency ENCODER_FLAC parallel && { log_info "Skipping FLAC conversion due to missing dependencies"; return 1; }
+  ! _check_dependency ENCODER_FLAC parallel && { log_info "Skipping FLAC conversion due to missing dependencies"; return 1; }
   export COLOR_INFO COLOR_RESET ENCODER_FLAC ENCODER_FLAC_OPTIONS ENCODER_FLAC_USE_WINE ENCODER_WINE
   find "$SRC_DIR" -iname "*.wav" -type f \
   | while IFS= read -r file; do
     [ -e "${file%.*}.flac" ] && continue
-    target_path=$(get_target_path "$file" "$FLAC_DIR")
+    target_path=$(_get_target_path "$file" "$FLAC_DIR")
     mkdir -p "$target_path"
     printf '%s\0%s\0' "$target_path$(basename "$file" .wav).flac" "$file"
   done | parallel -0 -N2 -j"$THREAD_NUM" --colsep '\0' '
@@ -256,7 +264,7 @@ copy_files() {
         [ -e "${file%.*}.wav" ] || [ -e "${file%.*}.WAV" ] || \
         [ -e "${file%.*}.flac" ] || [ -e "${file%.*}.FLAC" ]; \
         }; then
-          target_path=$(get_target_path "$file" "$IPOD_DIR")
+          target_path=$(_get_target_path "$file" "$IPOD_DIR")
           mkdir -p "$target_path"
           log_info "Moving ipod" "\"$file\" -> \"$target_path\""
           mv "$file" "$target_path"
@@ -265,7 +273,7 @@ copy_files() {
         ;;
       flac)
         if [ "$CP_FLAC" -eq 1 ] && { [ -e "${file%.*}.wav" ] || [ -e "${file%.*}.WAV" ]; }; then
-          target_path=$(get_target_path "$file" "$FLAC_DIR")
+          target_path=$(_get_target_path "$file" "$FLAC_DIR")
           mkdir -p "$target_path"
           log_info "Moving flac" "\"$file\" -> \"$target_path\""
           mv "$file" "$target_path"
@@ -278,7 +286,7 @@ copy_files() {
     file_no_ext=$(basename "$file")
     file_no_ext="${file_no_ext%.*}"
     if [ "$CP_IPOD" -eq 1 ]; then
-      target_path=$(get_target_path "$file" "$IPOD_DIR")
+      target_path=$(_get_target_path "$file" "$IPOD_DIR")
       if [ ! -e "$target_path$file_no_ext".* ]; then
         log_info "Copying ipod" "\"$file\" -> \"$target_path\""
         mkdir -p "$target_path"
@@ -286,7 +294,7 @@ copy_files() {
       fi
     fi
     if [ "$CP_FLAC" -eq 1 ]; then
-      target_path=$(get_target_path "$file" "$FLAC_DIR")
+      target_path=$(_get_target_path "$file" "$FLAC_DIR")
       if [ ! -e "$target_path$file_no_ext".* ]; then
         log_info "Copying flac" "\"$file\" -> \"$target_path\""
         mkdir -p "$target_path"
@@ -297,7 +305,7 @@ copy_files() {
 }
 
 rip_cd() {
-  ! check_dependency abcde && { log_info "Skipping CD rip due to missing dependencies"; return 1; }
+  ! _check_dependency abcde && { log_info "Skipping CD rip due to missing dependencies"; return 1; }
   conf_file=$(mktemp /tmp/mm_abcde.XXXXXX.conf)
   write_abcde_conf "$conf_file"
   printf '%s' "OUTPUTDIR=\"${SRC_DIR}${RIP_CD_FOLDER}\"" >>"$conf_file"
@@ -336,7 +344,7 @@ EOF
 }
 
 cover_processor() {
-  ! check_dependency magick && { log_info "Skipping cover processing due to missing dependencies"; return 1; }
+  ! _check_dependency magick && { log_info "Skipping cover processing due to missing dependencies"; return 1; }
   tmp_image=$(mktemp /tmp/mm_cover.XXXXXX.jpg)
   find "$SRC_DIR" \( -iname '*cover.png' -o -iname '*cover.jpg' -o -iname '*cover.jpeg' \) -type f \
   | while IFS= read -r file; do
@@ -369,7 +377,7 @@ cover_processor() {
 # ===  MAIN  ===
 # ==============
 
-trap cleanup_tmp_files EXIT INT TERM
+trap _cleanup_tmp_files EXIT INT TERM
 parse_parameters "$@"
 [ "$RIP_CD" -eq 1 ] && { rip_cd && printf '\n'; }
 

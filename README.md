@@ -8,7 +8,7 @@ Run `install-completions help` to get more information.
 
 ## Scripts
 
-### musicMaid
+### musicmaid
 
 Feature rich script that does most of the jobs.
 
@@ -19,9 +19,9 @@ Feature rich script that does most of the jobs.
 - Convert WAV/FLAC files to AAC
 - Multi-threaded conversions
 - Copy or move files to directories organized by artist/album structure
-- Process cover images
+- Resize, convert and compress cover images
 
-**Usage:** `musicMaid [options] <source> [ipod-dir] [flac-dir]`
+**Usage:** `musicmaid [options] <source> [ipod-dir] [flac-dir]`
 
 **Options:**
 
@@ -38,11 +38,11 @@ Feature rich script that does most of the jobs.
 
 ---
 
-### playlistAdaptor
+### playlist-adaptor
 
 Adapts playlists created by iTunes for RockBox compatibility and viceversa.
 
-**Usage:** `playlistAdaptor mode file`
+**Usage:** `playlist-adaptor mode file`
 
 **Options:**
 

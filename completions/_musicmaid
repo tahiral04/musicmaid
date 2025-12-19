@@ -1,6 +1,6 @@
-#compdef musicMaid
+#compdef musicmaid
 
-_musicMaid() {
+_musicmaid() {
   local context state state_descr line
   typeset -A opt_args
 
@@ -16,4 +16,4 @@ _musicMaid() {
     '*:directories:_files -/'
 }
 
-_musicMaid "$@"
+_musicmaid "$@"

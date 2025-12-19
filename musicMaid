@@ -13,8 +13,7 @@ COLOR_INFO='\033[33m'    # yellow
 COLOR_ERROR='\033[31m'   # red
 
 # --- ENCODERS ---
-#ENCODER_AAC="$HOME/.wine/drive_c/qaac/qaac.exe"
-ENCODER_AAC="$HOME/qaac/qaac.exe"
+ENCODER_AAC="$HOME/.wine/drive_c/qaac/qaac.exe"
 ENCODER_AAC_OPTIONS="--tvbr 100 --quality 2 --gapless-mode 2"
 ENCODER_AAC_USE_WINE=0
 ENCODER_FLAC="ffmpeg"
@@ -47,11 +46,6 @@ FLAC_DIR=""
 
 print_help() {
   cat <<EOF
-Shell script for managing audio files. It can rip CDs, convert WAV to FLAC,
-convert WAV/FLAC to AAC, copy or move files, and process cover images into
-an 'artist/album' directory structure.
-By default converts and copies files.
-
 Usage:
   $(basename "$0") [options] <source> [ipod-dir] [flac-dir]
 
@@ -189,7 +183,7 @@ check_dependency() {
         log_error "Error: $item_to_check exists but is not an executable file"
         missing_dep=1
       fi
-    elif ! command -v "$cmd" >/dev/null 2>&1; then
+    elif [ ! command -v "$cmd" >/dev/null 2>&1 ] || [ ! command -v "$item_to_check" >/dev/null 2>&1 ]; then
       log_error "Error: $cmd is not installed"
       missing_dep=1
     fi

@@ -28,6 +28,7 @@ CONV_FLAC=1
 CP_IPOD=1
 CP_FLAC=1
 RIP_CD=0
+RIP_MULTI_CD=0
 RIP_CD_FOLDER="mm_cd_rip"
 KEEP_VA=0
 COVER_PROCESS=0
@@ -57,6 +58,8 @@ Arguments:
 Options:
   -h, --help              Show this help message and exit
   -r, --rip               Rip CD into "source/$RIP_CD_FOLDER" before operations
+  -p, --rip-multi         Rip multiple CDs into "source/$RIP_CD_FOLDER" before
+                          operations
   -c, --cover             Process cover images (resize, convert, compress)
   -v, --keep-va           Don't rename "Various Artists" to "Compilations"
   -i, --ipod              Skip AAC conversions
@@ -136,6 +139,7 @@ parse_parameters() {
       --cp-ipod) CP_IPOD=0; shift ;;
       --cp-flac) CP_FLAC=0; shift ;;
       -r|--rip) RIP_CD=1; shift ;;
+      -p|--rip-multi) RIP_MULTI_CD=1; shift ;;
       -v|--keep-va) KEEP_VA=1; shift ;;
       -c|--cover) COVER_PROCESS=1; shift ;;
       -*|--*) log_error "Error: unknown option $1"; exit 1 ;;
@@ -311,10 +315,28 @@ rip_cd() {
   printf '%s' "OUTPUTDIR=\"${SRC_DIR}${RIP_CD_FOLDER}\"" >>"$conf_file"
 
   log_info "Ripping CD to \"${SRC_DIR}${RIP_CD_FOLDER}\" ..."
-  abcde -c "$conf_file"
-  rip_status=$?
+  abcde -c "$conf_file"; rip_status=$?
   [ "$rip_status" -ne 0 ] && { log_error "Error: CD rip failed"; exit 1; }
   log_success "CD ripped successfully!"
+}
+
+rip_multi_cd() {
+  ! _check_dependency abcde && { log_info "Skipping multi CD rip due to missing dependencies"; return 1; }
+  conf_file=$(mktemp /tmp/mm_abcde.XXXXXX.conf)
+  write_abcde_conf "$conf_file"
+  printf '%s' "OUTPUTDIR=\"${SRC_DIR}${RIP_CD_FOLDER}\"" >>"$conf_file"
+
+  log_info "Ripping CDs to \"${SRC_DIR}${RIP_CD_FOLDER}\" ..."
+  while true; do
+    abcde -c "$conf_file"; rip_status=$?
+    [ "$rip_status" -ne 0 ] && { log_error "Error: CD rip failed"; exit 1; }
+    log_success "CD ripped successfully!"
+    printf '%s' "Do you want to rip another CD? [y/N] "
+    readc ans && printf '\n'
+    [ "$ans" != "y" ] && [ "$ans" != "Y" ] && break
+    printf '%s' "Insert next CD and press any key to continue..."
+    readc ans && printf '\n'
+  done
 }
 
 write_abcde_conf() {
@@ -380,6 +402,7 @@ cover_processor() {
 trap _cleanup_tmp_files EXIT INT TERM
 parse_parameters "$@"
 [ "$RIP_CD" -eq 1 ] && { rip_cd && printf '\n'; }
+[ "$RIP_MULTI_CD" -eq 1 ] && { rip_multi_cd && printf '\n'; }
 
 [ "$CONV_IPOD" -eq 1 ] || [ "$CONV_FLAC" -eq 1 ] || \
 [ "$CP_FLAC" -eq 1 ] || [ "$CP_IPOD" -eq 1 ] || \

@@ -30,7 +30,7 @@ Feature rich script that does most of the jobs.
 - `-p, --cp-ipod` -- Don't copy or move files to _ipod-dir_
 - `-l, --cp-flac` -- Don't copy or move files to _flac-dir_
 - `-r, --rip` -- Rip CD into "_source/mm_cd_rip_" before operations
-- `-p, --rip-multi` -- Rip multiple CDs into "_source/mm_cd_rip_" before operations
+- `-m, --rip-multi` -- Rip multiple CDs into "_source/mm_cd_rip_" before operations
 - `-v, --keep-va` -- Don't rename "_Various Artists_" folder to "_Compilations_"
 - `-c, --cover` -- Process cover images in the _source_ directory
 - `-h, --help` -- Show help message

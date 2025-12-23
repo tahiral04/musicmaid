@@ -60,14 +60,14 @@ Arguments:
 Options:
   -h, --help              Show this help message and exit
   -r, --rip               Rip CD into "source/$RIP_CD_FOLDER" before operations
-  -p, --rip-multi         Rip multiple CDs into "source/$RIP_CD_FOLDER" before
+  -m, --rip-multi         Rip multiple CDs into "source/$RIP_CD_FOLDER" before
                           operations
   -c, --cover             Process cover images (resize, convert, compress)
   -v, --keep-va           Don't rename "Various Artists" to "Compilations"
   -i, --ipod              Skip AAC conversions
   -f, --flac              Skip FLAC conversions
-  --cp-ipod               Don't copy or move files to ipod-dir
-  --cp-flac               Don't copy or move files to flac-dir
+  -p, --cp-ipod           Don't copy or move files to ipod-dir
+  -l, --cp-flac           Don't copy or move files to flac-dir
 
 Dependencies:
   GNU Parallel   Parallel file conversion
@@ -145,10 +145,10 @@ parse_parameters() {
       -h|--help) print_help; exit 0 ;;
       -i|--ipod) CONV_IPOD=0; shift ;;
       -f|--flac) CONV_FLAC=0; shift ;;
-      --cp-ipod) CP_IPOD=0; shift ;;
-      --cp-flac) CP_FLAC=0; shift ;;
+      -p|--cp-ipod) CP_IPOD=0; shift ;;
+      -l|--cp-flac) CP_FLAC=0; shift ;;
       -r|--rip) RIP_CD=1; shift ;;
-      -p|--rip-multi) RIP_MULTI_CD=1; shift ;;
+      -m|--rip-multi) RIP_MULTI_CD=1; shift ;;
       -v|--keep-va) KEEP_VA=1; shift ;;
       -c|--cover) COVER_PROCESS=1; shift ;;
       -*|--*) log_error "Error: unknown option $1"; exit 1 ;;

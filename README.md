@@ -27,8 +27,8 @@ Feature rich script that does most of the jobs.
 
 - `-i, --ipod` -- Skip AAC conversions
 - `-f, --flac` -- Skip FLAC conversions
-- `--cp-ipod` -- Don't copy or move files to _ipod-dir_
-- `--cp-flac` -- Don't copy or move files to _flac-dir_
+- `-p, --cp-ipod` -- Don't copy or move files to _ipod-dir_
+- `-l, --cp-flac` -- Don't copy or move files to _flac-dir_
 - `-r, --rip` -- Rip CD into "_source/mm_cd_rip_" before operations
 - `-p, --rip-multi` -- Rip multiple CDs into "_source/mm_cd_rip_" before operations
 - `-v, --keep-va` -- Don't rename "_Various Artists_" folder to "_Compilations_"

@@ -43,12 +43,15 @@ Feature rich script that does most of the jobs.
 
 Adapts playlists created by iTunes for RockBox compatibility and viceversa.
 
-**Usage:** `playlist-adaptor mode file`
+**Usage:** `playlist-adaptor <from> <to> <file>`
 
 **Options:**
 
-- `mode` - Conversion mode, accepts values _itunes_ (converts for iPod) or _ipod_ (converts for iTunes)
+- `from` - The type of playlist to convert from
+- `to` - The type of playlist to convert to
 - `file` - Path to a playlist file or a directory containing playlist files
+
+**Valid types:**  `ipod`  `itunes`
 
 ---
 

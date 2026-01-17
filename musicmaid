@@ -399,7 +399,7 @@ EOF
 cover_processor() {
   ! _check_dependency magick && { log_info "Skipping cover processing due to missing dependencies"; return 1; }
   tmp_image=$(mktemp /tmp/mm_cover.XXXXXX.jpg)
-  find "$SRC_DIR" \( -iname '*cover.[Pp][Nn][Gg]' -o -iname '*cover.[Jj][Pp][Gg]' -o -iname '*cover.[Jj][Pp][Ee][Gg]' \) -type f \
+  find "$SRC_DIR" \( -iname '*cover.[Pp][Nn][Gg]' -o -iname '*cover.[Jj][Pp][Gg]' -o -iname '*cover.[Jj][Pp][Ee][Gg]' -o -iname '*cover.[Ww][Ee][Bb][Pp]'\) -type f \
   | while IFS= read -r file; do
     if [ ! -e "${file%.*}_ipod.jpg" ]; then
       log_info "Creating cover" "\"${file%.*}_ipod.jpg\""
@@ -408,7 +408,7 @@ cover_processor() {
     fi
 
     case "${file##*.}" in
-      [Pp][Nn][Gg])
+      [Pp][Nn][Gg]|[Ww][Ee][Bb][Pp])
         log_info "Converting cover" "\"$file\""
         magick "$file" -resize "${COVER_DIM}>" -strip -quality $COVER_CONVERT_QUALITY "$tmp_image"
         cp "$tmp_image" "${file%.*}.jpg"

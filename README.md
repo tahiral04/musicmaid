@@ -35,7 +35,7 @@ Feature rich script that does most of the jobs.
 - `-c, --cover` -- Process cover images in the _source_ directory
 - `-h, --help` -- Show help message
 
-**Dependencies:** GNU Parallel, abcde, ffmpeg, qaac, ImageMagick
+**Dependencies:** GNU Parallel, abcde, flac, qaac, ImageMagick
 
 ---
 

@@ -16,9 +16,8 @@ COLOR_ERROR='\033[31m'   # red
 ENCODER_AAC="$HOME/.wine/drive_c/qaac/qaac.exe"
 ENCODER_AAC_OPTIONS="--tvbr 100 --quality 2 --gapless-mode 2"
 ENCODER_AAC_USE_WINE=0
-ENCODER_FLAC="ffmpeg"
-ENCODER_FLAC_GLOBAL_OPTIONS="-hide_banner -loglevel info -nostats -y"
-ENCODER_FLAC_OPTIONS="-c:a flac -compression_level 12"
+ENCODER_FLAC="flac"
+ENCODER_FLAC_OPTIONS="-V -j1 -8"
 ENCODER_FLAC_USE_WINE=0
 ENCODER_WINE="WINEDEBUG=-all wine"
 
@@ -72,7 +71,7 @@ Options:
 Dependencies:
   GNU Parallel   Parallel file conversion
   abcde          CD ripper
-  ffmpeg         FLAC encoder
+  flac           FLAC encoder
   qaac           AAC encoder
   ImageMagick    Cover image processing
 EOF
@@ -263,7 +262,7 @@ convert_ipod() {
 
 convert_flac() {
   ! _check_dependency ENCODER_FLAC parallel && { log_info "Skipping FLAC conversion due to missing dependencies"; return 1; }
-  export COLOR_INFO COLOR_RESET ENCODER_FLAC ENCODER_FLAC_GLOBAL_OPTIONS ENCODER_FLAC_OPTIONS ENCODER_FLAC_USE_WINE ENCODER_WINE
+  export COLOR_INFO COLOR_RESET ENCODER_FLAC ENCODER_FLAC_OPTIONS ENCODER_FLAC_USE_WINE ENCODER_WINE
   find "$SRC_DIR" -iname "*.[Ww][Aa][Vv]" -type f \
   | while IFS= read -r file; do
     [ -e "${file%.*}.flac" ] && continue
@@ -273,13 +272,13 @@ convert_flac() {
     file_basename="${file##*/}"
     printf '%s\0%s\0' "$target_path${file_basename%.*}.flac" "$file"
   done | parallel -0 -N2 -j"$THREAD_NUM" --colsep '\0' '
-    dest_dir={1}
-    file={2}
-    printf '%b' "${COLOR_INFO}Converting audio${COLOR_RESET} \"$file\"\n"
+    output_file={1}
+    input_file={2}
+    printf '%b' "${COLOR_INFO}Converting audio${COLOR_RESET} \"$input_file\"\n"
     if [ "$ENCODER_FLAC_USE_WINE" -eq 1 ]; then
-      '"$ENCODER_WINE"' "$ENCODER_FLAC" '"$ENCODER_FLAC_GLOBAL_OPTIONS"' -i "$file" '"$ENCODER_FLAC_OPTIONS"' "$dest_dir"
+      '"$ENCODER_WINE"' "$ENCODER_FLAC" '"$ENCODER_FLAC_OPTIONS"' -o "$output_file" "$input_file"
     else
-      "$ENCODER_FLAC" '"$ENCODER_FLAC_GLOBAL_OPTIONS"' -i "$file" '"$ENCODER_FLAC_OPTIONS"' "$dest_dir"
+      "$ENCODER_FLAC" '"$ENCODER_FLAC_OPTIONS"' -o "$output_file" "$input_file"
     fi
   '
 }

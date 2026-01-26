@@ -1,82 +1,93 @@
 #!/bin/zsh
 
-MODES=( "ipod" "itunes" )
-MODE_FROM=""
-MODE_TO=""
-
-show_help(){
+help(){
   cat <<EOF
 Usage:
-  $(basename $0) <from> <to> <file>
+  $(basename $0) <from> <to> <file/dir> [<file/dir> ...]
 
 Options:
-  from      The type of playlist to convert from
-  to        The type of playlist to convert to
-  file      Path to a playlist file or a directory containing playlist files
+  from      Source format
+  to        Target format
+  file/dir  One or more files or directories to process
 
-Valid types are:  itunes, ipod
+Supported formats: ipod, itunes
 EOF
 }
 
-process_playlist() {
-  f="$1"
-  case "$2" in
-    ipod)
-      if ! grep -m 1 -Fq 'Y:\ipodLibrary' "$f"; then
-        echo "Skipping file '$f' (not an iTunes playlist)"
-        return
-      fi
-      sed -i '/^#/d' "$f"
-      sed -i 's|\\|/|g' "$f"
-      sed -i 's|Y:/ipodLibrary|/<HDD0>/music|g' "$f"
-      mv "$f" "${f:r}.m3u8"
-      ;;
+convert_to_ipod() {
+  target_file="$1"
+
+  case "$MODE_FROM" in
     itunes)
-      if ! grep -m 1 -Fq '/<HDD0>' "$f"; then
-        echo "Skipping file '$f' (not an iPod playlist)"
-        return
-      fi
-      sed -i 's#^/<HDD0>##' "$f"
-      sed -i 's|/music|Y:\\ipodLibrary|g' "$f"
-      sed -i 's|/|\\|g' "$f"
-      mv "$f" "${f:r}.m3u"
+      sed -i 's|Y:\\ipodLibrary|/music|g' "$target_file"
       ;;
   esac
+
+  sed -i '/^#/d' "$target_file"
+  sed -i 's|\\|/|g' "$target_file"
 }
 
+convert_to_itunes() {
+  target_file="$1"
+
+  case "$MODE_FROM" in
+    ipod)
+      sed -i 's|^/music|Y:\\ipodLibrary|g' "$target_file"
+      ;;
+  esac
+
+  sed -i '/^#/d' "$target_file"
+  sed -i 's#^/<HDD0>##' "$target_file"
+  sed -i 's|/|\\|g' "$target_file"
+}
+
+process_file() {
+  f="$1"
+
+  case "$MODE_TO" in
+    ipod)
+      extension="m3u8"
+      convert_to_ipod "$f"
+      ;;
+    itunes)
+      extension="m3u"
+      convert_to_itunes "$f"
+      ;;
+    *)
+      echo "[ERROR] Target format '$MODE_TO' not supported." >&2
+      exit 1
+      ;;
+  esac
+
+  mv "$f" "${f:r}.$extension"
+  echo "[OK] Processed: $f -> $MODE_TO"
+}
+
+########
+# MAIN #
+########
+
 if [ "$#" -lt 3 ]; then
-  show_help
+  help
   exit 1
 fi
 
 MODE_FROM="$1"
 MODE_TO="$2"
-TARGET_PATH="$3"
 
-if [[ ! " ${MODES[*]} " =~ " ${MODE_FROM} " ]]; then
-  echo "Error: Invalid type '$MODE_FROM'." >&2
-  exit 1
-fi
-if [[ ! " ${MODES[*]} " =~ " ${MODE_TO} " ]]; then
-  echo "Error: Invalid type '$MODE_TO'." >&2
-  exit 1
-fi
-if [ ! -e "$TARGET_PATH" ]; then
-  echo "Error: File or directory not found" >&2
-  exit 1
-fi
+shift
+shift
 
-if [ -d "$TARGET_PATH" ]; then
-  echo "Processing directory: $TARGET_PATH"
-  for file in "$TARGET_PATH"/*; do
-    process_playlist "$file" "$MODE_TO"
-  done
-elif [ -f "$TARGET_PATH" ]; then
-  echo "Processing file: $TARGET_PATH"
-  process_playlist "$TARGET_PATH" "$MODE_TO"
-else
-  echo "Error: Invalid file '$TARGET_PATH'." >&2
-  exit 1
-fi
+for item in "$@"; do
+  if [ -d "$item" ]; then
+    for file in "$item"/*(.); do
+      process_file "$file"
+    done
+  elif [ -f "$item" ]; then
+    process_file "$item"
+  else
+    echo "[WARNING] '$item' is not a valid file or directory. Skipping." >&2
+  fi
+done
 
-echo "Done!"
+echo "Done."

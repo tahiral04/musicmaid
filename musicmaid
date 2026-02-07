@@ -17,7 +17,7 @@ ENCODER_AAC="$HOME/.wine/drive_c/qaac/qaac.exe"
 ENCODER_AAC_OPTIONS="--tvbr 100 --quality 2 --gapless-mode 2"
 ENCODER_AAC_USE_WINE=0
 ENCODER_FLAC="flac"
-ENCODER_FLAC_OPTIONS="-V -j1 -8"
+ENCODER_FLAC_OPTIONS="-V --best -j1"
 ENCODER_FLAC_USE_WINE=0
 ENCODER_WINE="WINEDEBUG=-all wine"
 
@@ -33,6 +33,7 @@ RIP_CD_FOLDER="mm_cd_rip"
 KEEP_VA=0
 COVER_PROCESS=0
 COVER_CONVERT_QUALITY=85
+COVER_CROP="-gravity center -crop 1:1 +repage"
 COVER_DIM="1500x1500"
 COVER_DIM_IPOD="200x200"
 
@@ -276,9 +277,9 @@ convert_flac() {
     input_file={2}
     printf '%b' "${COLOR_INFO}Converting audio${COLOR_RESET} \"$input_file\"\n"
     if [ "$ENCODER_FLAC_USE_WINE" -eq 1 ]; then
-      '"$ENCODER_WINE"' "$ENCODER_FLAC" '"$ENCODER_FLAC_OPTIONS"' -o "$output_file" "$input_file"
+      '"$ENCODER_WINE"' "$ENCODER_FLAC" '"$ENCODER_FLAC_OPTIONS"' "$input_file"
     else
-      "$ENCODER_FLAC" '"$ENCODER_FLAC_OPTIONS"' -o "$output_file" "$input_file"
+      "$ENCODER_FLAC" '"$ENCODER_FLAC_OPTIONS"' -o "$output_file" -- "$input_file"
     fi
   '
 }
@@ -402,14 +403,14 @@ cover_processor() {
   | while IFS= read -r file; do
     if [ ! -e "${file%.*}_ipod.jpg" ]; then
       log_info "Creating cover" "\"${file%.*}_ipod.jpg\""
-      magick "$file" -thumbnail "${COVER_DIM_IPOD}>" "$tmp_image"
+      magick "$file" $COVER_CROP -thumbnail "${COVER_DIM_IPOD}>" "$tmp_image"
       cp "$tmp_image" "${file%.*}_ipod.jpg"
     fi
 
     case "${file##*.}" in
       [Pp][Nn][Gg]|[Ww][Ee][Bb][Pp])
         log_info "Converting cover" "\"$file\""
-        magick "$file" -resize "${COVER_DIM}>" -strip -quality $COVER_CONVERT_QUALITY "$tmp_image"
+        magick "$file" $COVER_CROP -resize "${COVER_DIM}>" -strip -quality $COVER_CONVERT_QUALITY "$tmp_image"
         cp "$tmp_image" "${file%.*}.jpg"
         rm -f "$file"
         ;;
@@ -417,7 +418,7 @@ cover_processor() {
         log_info "Resizing cover" "\"$file\""
         magick_opts="-resize ${COVER_DIM}> -strip"
         [ "$(wc -c < "$file")" -gt 1048576 ] && magick_opts="$magick_opts -quality $COVER_CONVERT_QUALITY"
-        magick "$file" $magick_opts "$tmp_image"
+        magick "$file" $COVER_CROP $magick_opts "$tmp_image"
         cp "$tmp_image" "$file"
         ;;
     esac

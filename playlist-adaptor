@@ -19,7 +19,7 @@ convert_to_ipod() {
 
   case "$MODE_FROM" in
     itunes)
-      sed -i 's|Y:\\ipodLibrary|/music|g' "$target_file"
+      sed -i 's|Y:\\ipod|/music|g' "$target_file"
       ;;
   esac
 
@@ -32,7 +32,7 @@ convert_to_itunes() {
 
   case "$MODE_FROM" in
     ipod)
-      sed -i 's|^/music|Y:\\ipodLibrary|g' "$target_file"
+      sed -i 's|^/music|Y:\\ipod|g' "$target_file"
       ;;
   esac
 

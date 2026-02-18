@@ -66,3 +66,11 @@ Converts audio files downloaded with yt-dlp to MP3 format. It can also cut audio
 - `file` - Path to the audio file
 - `start_seconds` - Start time in seconds
 - `end_seconds` - End time in seconds
+
+---
+
+### ipodsync
+
+Syncs the music library with the iPod and generates the updated Rockbox database.
+
+**Usage:** `ipodsync`

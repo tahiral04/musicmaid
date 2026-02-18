@@ -1,0 +1,29 @@
+#!/bin/zsh
+
+IPOD="/run/media/$USER/LISDEN"
+RBDIR="$HOME/customBuilds/rockbox-4.0/build-ui/simdisk"
+RBUI="$HOME/customBuilds/rockbox-4.0/build-ui/rockboxui"
+MUSIC="$HOME/Music/ipod/"
+
+if [[ ! -d "$IPOD" ]]; then
+    echo "iPod not found. Be sure to mount the device and try again."
+    exit 1
+fi
+
+echo "Syncing music files to iPod..."
+rsync -rtvPh --modify-window=1 --size-only --delete "$MUSIC" "$IPOD/music/"
+
+echo "Syncing database files..."
+if [[ -f "$IPOD/.rockbox/database_changelog.txt" ]]; then
+    cp "$IPOD/.rockbox/database_changelog.txt" "$RBDIR/.rockbox/"
+else
+    echo "No database changelog found on iPod."
+    exit 1
+fi
+(cd "$RBDIR/.." && "$RBUI")
+echo "Finalizing database sync..."
+cp "$RBDIR/.rockbox/"database_*.tcd "$IPOD/.rockbox/"
+sync
+echo "Sync complete."
+
+echo "The iPod can be safely ejected now."

@@ -16,11 +16,10 @@ COLOR_ERROR='\033[31m'   # red
 
 # --- ENCODERS ---
 ENCODER_AAC="$HOME/.wine/drive_c/qaac/qaac.exe"
-ENCODER_AAC_OPTIONS="--tvbr 100 --quality 2 --gapless-mode 2"
+ENCODER_AAC_OPTIONS="--tvbr 100 --quality 2 --gapless-mode 2 --silent"
 ENCODER_AAC_USE_WINE=0
 ENCODER_FLAC="flac"
-ENCODER_FLAC_OPTIONS="-V --best -j1"
-ENCODER_FLAC_USE_WINE=0
+ENCODER_FLAC_OPTIONS="-V --best -j1 --silent"
 ENCODER_WINE="WINEDEBUG=-all wine"
 
 # --- OPTIONS ---
@@ -179,7 +178,7 @@ _check_dependency() {
         print_error "$item_to_check exists but is not an executable file"
         missing_dep=1
       fi
-    elif ! command -v "$cmd" > /dev/null 2>&1 || \
+    elif ! command -v "$cmd" > /dev/null 2>&1 && \
          ! command -v "$item_to_check" > /dev/null 2>&1; then
       print_error "$cmd is not installed"
       missing_dep=1
@@ -205,9 +204,10 @@ _get_target_path() {
 
 convert_ipod() {
   ! _check_dependency ENCODER_AAC parallel && { print_info "Skipping AAC conversion due to missing dependencies"; return 1; }
+  
   export COLOR_INFO COLOR_RESET ENCODER_AAC ENCODER_AAC_OPTIONS ENCODER_AAC_USE_WINE ENCODER_WINE
-  local target_path
-  for file in $SRC_DIR/**/*.(#i)(wav|flac)(.); do
+  local target_path file
+  for file in $SRC_DIR**/*.(#i)(wav|flac)(.); do
     [[ -e ${file:r}.m4a ]] && continue
     [[ ${(L)${file:e}} == "flac" && ( -e ${file:r}.wav || -e ${file:r}.WAV ) ]] && continue
 
@@ -217,7 +217,7 @@ convert_ipod() {
   done | parallel -0 -N2 -j"$THREAD_NUM" --colsep '\0' '
     dest_dir={1}
     file={2}
-    printf '%b' "${COLOR_INFO}Converting audio${COLOR_RESET} \"$file\"\n"
+    printf '%b' "${COLOR_INFO}[AAC]${COLOR_RESET} Converting audio \"$file\"\n"
     if [ "$ENCODER_AAC_USE_WINE" -eq 1 ]; then
       '"$ENCODER_WINE"' "$ENCODER_AAC" '"$ENCODER_AAC_OPTIONS"' -d "$dest_dir" "$file"
     else
@@ -228,9 +228,10 @@ convert_ipod() {
 
 convert_flac() {
   ! _check_dependency ENCODER_FLAC parallel && { print_info "Skipping FLAC conversion due to missing dependencies"; return 1; }
-  export COLOR_INFO COLOR_RESET ENCODER_FLAC ENCODER_FLAC_OPTIONS ENCODER_FLAC_USE_WINE ENCODER_WINE
-  local target_path
-  for file in $SRC_DIR/**/*.(#i)wav(.); do
+
+  export COLOR_INFO COLOR_RESET ENCODER_FLAC ENCODER_FLAC_OPTIONS
+  local target_path file
+  for file in $SRC_DIR**/*.(#i)wav(.); do
     [[ -e ${file:r}.flac ]] && continue
 
     target_path=$(_get_target_path "$file" "$FLAC_DIR")
@@ -239,12 +240,8 @@ convert_flac() {
   done | parallel -0 -N2 -j"$THREAD_NUM" --colsep '\0' '
     output_file={1}
     input_file={2}
-    printf '%b' "${COLOR_INFO}Converting audio${COLOR_RESET} \"$input_file\"\n"
-    if [ "$ENCODER_FLAC_USE_WINE" -eq 1 ]; then
-      '"$ENCODER_WINE"' "$ENCODER_FLAC" '"$ENCODER_FLAC_OPTIONS"' "$input_file"
-    else
-      "$ENCODER_FLAC" '"$ENCODER_FLAC_OPTIONS"' -o "$output_file" -- "$input_file"
-    fi
+    printf '%b' "${COLOR_INFO}[FLAC]${COLOR_RESET} Converting audio \"$input_file\"\n"
+    "$ENCODER_FLAC" '"$ENCODER_FLAC_OPTIONS"' -o "$output_file" -- "$input_file"
   '
 }
 
@@ -289,7 +286,8 @@ _copy_flac() {
 }
 
 copy_files() {
-  for file in $SRC_DIR/**/*.(#i)(m4a|mp3|flac)(.); do
+  local file
+  for file in $SRC_DIR**/*.(#i)(m4a|mp3|flac)(.); do
     (( CP_FLAC )) && _copy_flac "$file"
     if (( CP_IPOD )) && [[ -e $file && ${(L)${file:e}} != "flac" ]]; then
       _copy_ipod "$file"
@@ -326,7 +324,7 @@ rip_multi_cd() {
     local ans=$?
     print
     (( ans != 0 )) && break
-    read -sk 1 "Insert next CD and press any key to continue..."
+    read -sk 1 "?Insert next CD and press any key to continue..."
     print
   done
 }
@@ -394,15 +392,17 @@ cover_processor() {
 trap _cleanup_tmp_files EXIT INT TERM
 parse_parameters "$@"
 
-# (( RIP_CD )) && { rip_cd && print; }
-# (( RIP_MULTI_CD )) && { rip_multi_cd && print; }
+(( RIP_CD )) && { rip_cd && print; }
+(( RIP_MULTI_CD )) && { rip_multi_cd && print; }
 
-# (( CONV_IPOD || CONV_FLAC || CP_IPOD || CP_FLAC || COVER_PROCESS )) && print_info "Scanning directory..."
+(( CONV_IPOD || CONV_FLAC || CP_IPOD || CP_FLAC || COVER_PROCESS )) && print_info "Scanning directory..."
 
-# (( CONV_IPOD )) && { convert_ipod && print; }
-# (( CONV_FLAC )) && { convert_flac && print; }
-# (( CP_IPOD || CP_FLAC )) && { copy_files && print; }
-# (( COVER_PROCESS )) && { cover_processor && print; }
+(( CONV_IPOD )) && { convert_ipod && print; } &
+(( CONV_FLAC )) && { convert_flac && print; } &
+wait
+
+(( CP_IPOD || CP_FLAC )) && { copy_files && print; }
+(( COVER_PROCESS )) && { cover_processor && print; }
 
 print_success "All done!"
 exit 0

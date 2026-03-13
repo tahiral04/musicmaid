@@ -48,7 +48,7 @@ typeset _MKDIR_LAST_CREATED="" SRC_DIR="" IPOD_DIR="" FLAC_DIR=""
 print_help() {
   cat <<EOF
 Usage:
-  ${0:t} [options] <source> [ipod-dir] [flac-dir]
+  musicmaid [options] <source> [ipod-dir] [flac-dir]
 
 Arguments:
   source         Source directory with the files to be processed

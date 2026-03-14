@@ -15,19 +15,20 @@ COLOR_INFO='\033[33m'    # yellow
 COLOR_ERROR='\033[31m'   # red
 
 # --- ENCODERS ---
-ENCODER_AAC="$HOME/.wine/drive_c/qaac/qaac.exe"
-ENCODER_AAC_OPTIONS="--tvbr 100 --quality 2 --gapless-mode 2 --silent"
-ENCODER_AAC_USE_WINE=0
-ENCODER_FLAC="flac"
-ENCODER_FLAC_OPTIONS="-V --best -j1 --silent"
+ENCODER_LOSSY="$HOME/.wine/drive_c/qaac/qaac.exe"
+ENCODER_LOSSY_OPTIONS="--tvbr 100 --quality 2 --gapless-mode 2 --silent"
+ENCODER_LOSSY_EXT="m4a"
+ENCODER_LOSSLESS="flac"
+ENCODER_LOSSLESS_OPTIONS="-V --best -j1 --silent"
+ENCODER_LOSSLESS_EXT="flac"
 ENCODER_WINE="WINEDEBUG=-all wine"
 
 # --- OPTIONS ---
 THREAD_NUM=$(getconf _NPROCESSORS_ONLN 2>/dev/null || print 1)
-CONV_IPOD=1
-CONV_FLAC=1
-CP_IPOD=1
-CP_FLAC=1
+CONV_LOSSY=0
+CONV_LOSSLESS=1
+CP_LOSSY=0
+CP_LOSSLESS=1
 RIP_CD=0
 RIP_MULTI_CD=0
 RIP_CD_FOLDER="mm_cd_rip"
@@ -36,10 +37,10 @@ COVER_PROCESS=0
 COVER_CONVERT_QUALITY=85
 COVER_CROP=(-gravity center -crop 1:1 +repage)
 COVER_DIM="1500x1500"
-COVER_DIM_IPOD="200x200"
+COVER_DIM_THUMB="200x200"
 
 # --- GLOBAL VARIABLES ---
-typeset _MKDIR_LAST_CREATED="" SRC_DIR="" IPOD_DIR="" FLAC_DIR=""
+typeset _MKDIR_LAST_CREATED="" SRC_DIR="" LOSSY_DIR="" LOSSLESS_DIR=""
 
 # ===================
 # ===  FUNCTIONS  ===
@@ -48,12 +49,12 @@ typeset _MKDIR_LAST_CREATED="" SRC_DIR="" IPOD_DIR="" FLAC_DIR=""
 print_help() {
   cat <<EOF
 Usage:
-  musicmaid [options] <source> [ipod-dir] [flac-dir]
+  musicmaid [options] <source> [lossy-dir] [lossless-dir]
 
 Arguments:
   source         Source directory with the files to be processed
-  ipod-dir       Destination directory for AAC files (defaults to source)
-  flac-dir       Destination directory for FLAC files (defaults to source)
+  lossy-dir      Destination directory for LOSSY files (defaults to source)
+  lossless-dir   Destination directory for LOSSLESS files (defaults to source)
 
 Options:
   -h, --help              Show this help message and exit
@@ -62,16 +63,14 @@ Options:
                           operations
   -c, --cover             Process cover images (resize, convert, compress)
   -v, --keep-va           Don't rename "Various Artists" to "Compilations"
-  -i, --ipod              Skip AAC conversions
-  -f, --flac              Skip FLAC conversions
-  -p, --cp-ipod           Don't copy or move files to ipod-dir
-  -l, --cp-flac           Don't copy or move files to flac-dir
+  -a, --lossy             Do LOSSY conversions
+  -f, --lossless          Skip LOSSLESS conversions
+  -A, --cp-lossy          Do copy or move files to lossy-dir
+  -F, --cp-lossless       Don't copy or move files to lossless-dir
 
 Dependencies:
   GNU Parallel   Parallel file conversion
   abcde          CD ripper
-  flac           FLAC encoder
-  qaac           AAC encoder
   ImageMagick    Cover image processing
 EOF
 }
@@ -110,51 +109,51 @@ _ask_mkdir() {
 parse_parameters() {
   (( $# == 0 )) && { print_error "Too few arguments. Use '-h' or '--help' to see how to use this script"; exit 1; }
 
-  local -a opt_help opt_ipod opt_flac opt_cp_ipod opt_cp_flac opt_rip opt_rip_multi opt_keep_va opt_cover
+  local -a opt_help opt_lossy opt_lossless opt_cp_lossy opt_cp_lossless opt_rip opt_rip_multi opt_keep_va opt_cover
   zparseopts -D -F -- \
-    h=opt_help       -help=opt_help \
-    i=opt_ipod       -ipod=opt_ipod \
-    f=opt_flac       -flac=opt_flac \
-    p=opt_cp_ipod    -cp-ipod=opt_cp_ipod \
-    l=opt_cp_flac    -cp-flac=opt_cp_flac \
-    r=opt_rip        -rip=opt_rip \
-    m=opt_rip_multi  -rip-multi=opt_rip_multi \
-    v=opt_keep_va    -keep-va=opt_keep_va \
-    c=opt_cover      -cover=opt_cover \
+    h=opt_help        -help=opt_help \
+    a=opt_lossy       -lossy=opt_lossy \
+    f=opt_lossless    -lossless=opt_lossless \
+    A=opt_cp_lossy    -cp-lossy=opt_cp_lossy \
+    F=opt_cp_lossless -cp-lossless=opt_cp_lossless \
+    r=opt_rip         -rip=opt_rip \
+    m=opt_rip_multi   -rip-multi=opt_rip_multi \
+    v=opt_keep_va     -keep-va=opt_keep_va \
+    c=opt_cover       -cover=opt_cover \
     2>/dev/null || { print_error "Unknown option: $1"; exit 1; }
 
   (( ${#opt_help} )) && { print_help; exit 0; }
-  (( ${#opt_ipod} )) && CONV_IPOD=0
-  (( ${#opt_flac} )) && CONV_FLAC=0
-  (( ${#opt_cp_ipod} )) && CP_IPOD=0
-  (( ${#opt_cp_flac} )) && CP_FLAC=0
+  (( ${#opt_lossy} )) && CONV_LOSSY=1
+  (( ${#opt_lossless} )) && CONV_LOSSLESS=0
+  (( ${#opt_cp_lossy} )) && CP_LOSSY=1
+  (( ${#opt_cp_lossless} )) && CP_LOSSLESS=0
   (( ${#opt_rip} )) && RIP_CD=1
   (( ${#opt_rip_multi} )) && RIP_MULTI_CD=1
   (( ${#opt_keep_va} )) && KEEP_VA=1
   (( ${#opt_cover} )) && COVER_PROCESS=1
 
   if (( $# > 0 )); then SRC_DIR=$1; shift; fi
-  if (( $# > 0 && (CONV_IPOD || CP_IPOD) )); then IPOD_DIR=$1; shift; fi
-  if (( $# > 0 && (CONV_FLAC || CP_FLAC) )); then FLAC_DIR=$1; shift; fi
+  if (( $# > 0 && (CONV_LOSSY || CP_LOSSY) )); then LOSSY_DIR=$1; shift; fi
+  if (( $# > 0 && (CONV_LOSSLESS || CP_LOSSLESS) )); then LOSSLESS_DIR=$1; shift; fi
   (( $# > 0 )) && { print_error "Too many arguments"; exit 1; }
 
-  if (( CONV_IPOD || CONV_FLAC || CP_IPOD || CP_FLAC || RIP_CD || COVER_PROCESS )) && \
+  if (( CONV_LOSSY || CONV_LOSSLESS || CP_LOSSY || CP_LOSSLESS || RIP_CD || COVER_PROCESS )) && \
      [[ -z $SRC_DIR || ! -d $SRC_DIR ]]; then
     print_error "Missing or invalid source directory"
     exit 1
   fi
   SRC_DIR=$(realpath "$SRC_DIR")/
 
-  IPOD_DIR=${IPOD_DIR:-$SRC_DIR}
-  [[ ! -d $IPOD_DIR ]] && _ask_mkdir "$IPOD_DIR"
-  IPOD_DIR=$(realpath "$IPOD_DIR")/
+  LOSSY_DIR=${LOSSY_DIR:-$SRC_DIR}
+  [[ ! -d $LOSSY_DIR ]] && _ask_mkdir "$LOSSY_DIR"
+  LOSSY_DIR=$(realpath "$LOSSY_DIR")/
 
-  FLAC_DIR=${FLAC_DIR:-$SRC_DIR}
-  [[ ! -d $FLAC_DIR ]] && _ask_mkdir "$FLAC_DIR"
-  FLAC_DIR=$(realpath "$FLAC_DIR")/
+  LOSSLESS_DIR=${LOSSLESS_DIR:-$SRC_DIR}
+  [[ ! -d $LOSSLESS_DIR ]] && _ask_mkdir "$LOSSLESS_DIR"
+  LOSSLESS_DIR=$(realpath "$LOSSLESS_DIR")/
 
-  [[ $SRC_DIR == $IPOD_DIR ]] && CP_IPOD=0
-  [[ $SRC_DIR == $FLAC_DIR ]] && CP_FLAC=0
+  [[ $SRC_DIR == $LOSSY_DIR ]] && CP_LOSSY=0
+  [[ $SRC_DIR == $LOSSLESS_DIR ]] && CP_LOSSLESS=0
 }
 
 # Checks if a command is available. Returns 1 if at least one is missing, 0 otherwise.
@@ -202,76 +201,80 @@ _get_target_path() {
   print -n "$result"
 }
 
-convert_ipod() {
-  ! _check_dependency ENCODER_AAC parallel && { print_info "Skipping AAC conversion due to missing dependencies"; return 1; }
+convert_lossy() {
+  ! _check_dependency ENCODER_LOSSY parallel && { print_info "Skipping LOSSY conversion due to missing dependencies"; return 1; }
   
-  export COLOR_INFO COLOR_RESET ENCODER_AAC ENCODER_AAC_OPTIONS ENCODER_AAC_USE_WINE ENCODER_WINE
+  export COLOR_INFO COLOR_RESET ENCODER_LOSSY ENCODER_LOSSY_OPTIONS ENCODER_LOSSY_USE_WINE ENCODER_WINE
   local target_path file
-  for file in $SRC_DIR**/*.(#i)(wav|flac)(.); do
-    [[ -e ${file:r}.m4a ]] && continue
-    [[ ${(L)${file:e}} == "flac" && ( -e ${file:r}.wav || -e ${file:r}.WAV ) ]] && continue
+  for file in $SRC_DIR**/*.(#i)(wav|${ENCODER_LOSSLESS_EXT})(.); do
+    [[ -e ${file:r}.$ENCODER_LOSSY_EXT ]] && continue
+    [[ ${(L)${file:e}} == ${ENCODER_LOSSLESS_EXT} && ( -e ${file:r}.wav || -e ${file:r}.WAV ) ]] && continue
 
-    target_path=$(_get_target_path "$file" "$IPOD_DIR")
+    target_path=$(_get_target_path "$file" "$LOSSY_DIR")
     _mkdir_cache "$target_path"
     printf '%s\0%s\0' "$target_path" "$file"
   done | parallel -0 -N2 -j"$THREAD_NUM" --colsep '\0' '
     dest_dir={1}
     file={2}
-    printf '%b' "${COLOR_INFO}[AAC]${COLOR_RESET} Converting audio \"$file\"\n"
-    if [ "$ENCODER_AAC_USE_WINE" -eq 1 ]; then
-      '"$ENCODER_WINE"' "$ENCODER_AAC" '"$ENCODER_AAC_OPTIONS"' -d "$dest_dir" "$file"
+    printf '%b' "${COLOR_INFO}[LOSSY]${COLOR_RESET} Converting \"$file\"\n"
+    if [ "$ENCODER_LOSSY_USE_WINE" -eq 1 ]; then
+      '"$ENCODER_WINE"' "$ENCODER_LOSSY" '"$ENCODER_LOSSY_OPTIONS"' -d "$dest_dir" "$file"
     else
-      "$ENCODER_AAC" '"$ENCODER_AAC_OPTIONS"' -d "$dest_dir" "$file"
+      "$ENCODER_LOSSY" '"$ENCODER_LOSSY_OPTIONS"' -d "$dest_dir" "$file"
     fi
   '
 }
 
-convert_flac() {
-  ! _check_dependency ENCODER_FLAC parallel && { print_info "Skipping FLAC conversion due to missing dependencies"; return 1; }
+convert_lossless() {
+  ! _check_dependency ENCODER_LOSSLESS parallel && { print_info "Skipping LOSSLESS conversion due to missing dependencies"; return 1; }
 
-  export COLOR_INFO COLOR_RESET ENCODER_FLAC ENCODER_FLAC_OPTIONS
+  export COLOR_INFO COLOR_RESET ENCODER_LOSSLESS ENCODER_LOSSLESS_OPTIONS ENCODER_LOSSLESS_USE_WINE ENCODER_WINE
   local target_path file
   for file in $SRC_DIR**/*.(#i)wav(.); do
-    [[ -e ${file:r}.flac ]] && continue
+    [[ -e ${file:r}.$ENCODER_LOSSLESS_EXT ]] && continue
 
-    target_path=$(_get_target_path "$file" "$FLAC_DIR")
+    target_path=$(_get_target_path "$file" "$LOSSLESS_DIR")
     _mkdir_cache "$target_path"
-    printf '%s\0%s\0' "${target_path}${file:t:r}.flac" "$file"
+    printf '%s\0%s\0' "${target_path}${file:t:r}.${ENCODER_LOSSLESS_EXT}" "$file"
   done | parallel -0 -N2 -j"$THREAD_NUM" --colsep '\0' '
     output_file={1}
     input_file={2}
-    printf '%b' "${COLOR_INFO}[FLAC]${COLOR_RESET} Converting audio \"$input_file\"\n"
-    "$ENCODER_FLAC" '"$ENCODER_FLAC_OPTIONS"' -o "$output_file" -- "$input_file"
+    printf '%b' "${COLOR_INFO}[LOSSLESS]${COLOR_RESET} Converting \"$input_file\"\n"
+    if [ "$ENCODER_LOSSLESS_USE_WINE" -eq 1 ]; then
+      '"$ENCODER_WINE"' "$ENCODER_LOSSLESS" '"$ENCODER_LOSSLESS_OPTIONS"' -o "$output_file" -- "$input_file"
+    else
+      "$ENCODER_LOSSLESS" '"$ENCODER_LOSSLESS_OPTIONS"' -o "$output_file" -- "$input_file"
+    fi
   '
 }
 
-_copy_ipod() {
+_copy_lossy() {
   local file=$1
-  local target_path=$(_get_target_path "$file" "$IPOD_DIR")
+  local target_path=$(_get_target_path "$file" "$LOSSY_DIR")
   _mkdir_cache "$target_path"
 
   if [[ -e ${file:r}.wav  || -e ${file:r}.WAV || \
-        -e ${file:r}.flac || -e ${file:r}.FLAC ]]; then
-    print_info "Moving ipod" "\"$file\" -> \"$target_path\""
+        -e ${file:r}.${ENCODER_LOSSLESS_EXT} || -e ${file:r}.${(U)ENCODER_LOSSLESS_EXT} ]]; then
+    print_info "Moving lossy" "\"$file\" -> \"$target_path\""
     mv "$file" "$target_path"
     return 0
   fi
 
-  print_info "Copying ipod" "\"$file\" -> \"$target_path\""
+  print_info "Copying lossy" "\"$file\" -> \"$target_path\""
   cp "$file" "$target_path"
 }
 
-_copy_flac() {
+_copy_lossless() {
   local file=$1
-  local target_path=$(_get_target_path "$file" "$FLAC_DIR")
+  local target_path=$(_get_target_path "$file" "$LOSSLESS_DIR")
   _mkdir_cache "$target_path"
 
-  if [[ ${(L)${file:e}} == "flac" ]]; then
+  if [[ ${(L)${file:e}} == ${ENCODER_LOSSLESS_EXT} ]]; then
     if [[ -e ${file:r}.wav || -e ${file:r}.WAV ]]; then
-      print_info "Moving flac" "\"$file\" -> \"$target_path\""
+      print_info "Moving lossless" "\"$file\" -> \"$target_path\""
       mv "$file" "$target_path"
     else
-      print_info "Copying flac" "\"$file\" -> \"$target_path\""
+      print_info "Copying lossless" "\"$file\" -> \"$target_path\""
       cp "$file" "$target_path"
     fi
     return 0
@@ -279,18 +282,18 @@ _copy_flac() {
 
   local target_file_basename="${target_path}${file:t:r}"
   local -a target_file_matches=( "${target_file_basename}".* )
-  [[ -e ${file:r}.flac || -e ${file:r}.FLAC || ${#target_file_matches} -gt 0 ]] && return 0
+  [[ -e ${file:r}.${ENCODER_LOSSLESS_EXT} || -e ${file:r}.${(U)ENCODER_LOSSLESS_EXT} || ${#target_file_matches} -gt 0 ]] && return 0
 
-  print_info "Copying flac" "\"$file\" -> \"$target_path\""
+  print_info "Copying lossless" "\"$file\" -> \"$target_path\""
   cp "$file" "$target_path"
 }
 
 copy_files() {
   local file
-  for file in $SRC_DIR**/*.(#i)(m4a|mp3|flac)(.); do
-    (( CP_FLAC )) && _copy_flac "$file"
-    if (( CP_IPOD )) && [[ -e $file && ${(L)${file:e}} != "flac" ]]; then
-      _copy_ipod "$file"
+  for file in $SRC_DIR**/*.(#i)(${ENCODER_LOSSY_EXT}|${ENCODER_LOSSLESS_EXT}|mp3)(.); do
+    (( CP_LOSSLESS )) && _copy_lossless "$file"
+    if (( CP_LOSSY )) && [[ -e $file && ${(L)${file:e}} != ${ENCODER_LOSSLESS_EXT} ]]; then
+      _copy_lossy "$file"
     fi
   done
 }
@@ -360,11 +363,11 @@ cover_processor() {
   local tmp_image=$(mktemp /tmp/mm_cover.XXXXXX.jpg)
 
   local file
-  for file in $SRC_DIR/**/*(#i)cover.(png|jpg|jpeg|webp)(.); do
-    if [[ ! -e ${file:r}_ipod.jpg ]]; then
-      print_info "Creating cover" "\"${file:r}_ipod.jpg\""
-      magick "$file" "${COVER_CROP[@]}" -thumbnail "${COVER_DIM_IPOD}>" "$tmp_image"
-      cp "$tmp_image" "${file:r}_ipod.jpg"
+  for file in $SRC_DIR**/*(#i)cover.(png|jpg|jpeg|webp)(.); do
+    if [[ ! -e ${file:r}_thumb.jpg ]]; then
+      print_info "Creating thumbnail" "\"${file:r}_thumb.jpg\""
+      magick "$file" "${COVER_CROP[@]}" -thumbnail "${COVER_DIM_THUMB}>" "$tmp_image"
+      cp "$tmp_image" "${file:r}_thumb.jpg"
     fi
 
     case ${(L)${file:e}} in
@@ -395,13 +398,13 @@ parse_parameters "$@"
 (( RIP_CD )) && { rip_cd && print; }
 (( RIP_MULTI_CD )) && { rip_multi_cd && print; }
 
-(( CONV_IPOD || CONV_FLAC || CP_IPOD || CP_FLAC || COVER_PROCESS )) && print_info "Scanning directory..."
+(( CONV_LOSSY || CONV_LOSSLESS || CP_LOSSY || CP_LOSSLESS || COVER_PROCESS )) && print_info "Scanning directory..."
 
-(( CONV_IPOD )) && { convert_ipod && print; } &
-(( CONV_FLAC )) && { convert_flac && print; } &
+(( CONV_LOSSY )) && { convert_lossy && print; } &
+(( CONV_LOSSLESS )) && { convert_lossless && print; } &
 wait
 
-(( CP_IPOD || CP_FLAC )) && { copy_files && print; }
+(( CP_LOSSY || CP_LOSSLESS )) && { copy_files && print; }
 (( COVER_PROCESS )) && { cover_processor && print; }
 
 print_success "All done!"

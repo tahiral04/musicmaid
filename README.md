@@ -14,28 +14,42 @@ Feature rich script that does most of the jobs.
 
 **Features:**
 
-- Rip CDs to WAV format
-- Convert WAV files to FLAC
-- Convert WAV/FLAC files to AAC
+- Convert WAV files to lossless format (by default flac)
+- Convert WAV/FLAC files to lossy format (by default aac)
 - Multi-threaded conversions
 - Copy or move files to directories organized by artist/album structure
+- Rip CDs to WAV format
 - Resize, convert and compress cover images
 
-**Usage:** `musicmaid [options] <source> [ipod-dir] [flac-dir]`
+**Usage:** `musicmaid [options] <source> [lossy-dir] [lossless-dir]`
+
+**Encoders:**
+
+Edit these variables in the script to fine tune the encoders options or to set different encoders. By default the lossless encoder is `flac` and the lossy encoder is `qaac`.
+
+```bash
+ENCODER_LOSSY="lossy-encoder"
+ENCODER_LOSSY_OPTIONS="lossy-encoder-options"
+ENCODER_LOSSY_EXT="lossy-extension"
+ENCODER_LOSSLESS="lossless-encoder"
+ENCODER_LOSSLESS_OPTIONS="lossless-encoder-options"
+ENCODER_LOSSLESS_EXT="lossless-extension"
+ENCODER_WINE="wine"
+```
 
 **Options:**
 
-- `-i, --ipod` -- Skip AAC conversions
-- `-f, --flac` -- Skip FLAC conversions
-- `-p, --cp-ipod` -- Don't copy or move files to _ipod-dir_
-- `-l, --cp-flac` -- Don't copy or move files to _flac-dir_
+- `-a, --lossy` -- Do LOSSY conversions
+- `-f, --lossless` -- Skip LOSSLESS conversions
+- `-A, --cp-lossy` -- Do copy or move files to _lossy-dir_
+- `-F, --cp-lossless` -- Don't copy or move files to _lossless-dir_
 - `-r, --rip` -- Rip CD into "_source/mm_cd_rip_" before operations
 - `-m, --rip-multi` -- Rip multiple CDs into "_source/mm_cd_rip_" before operations
 - `-v, --keep-va` -- Don't rename "_Various Artists_" folder to "_Compilations_"
 - `-c, --cover` -- Process cover images in the _source_ directory
 - `-h, --help` -- Show help message
 
-**Dependencies:** GNU Parallel, abcde, flac, qaac, ImageMagick
+**Dependencies:** GNU Parallel, abcde, ImageMagick
 
 ---
 

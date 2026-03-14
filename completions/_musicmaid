@@ -10,13 +10,13 @@ _musicmaid() {
     '(-r --rip -m --rip-multi)'{-m,--rip-multi}'[Rip multiple CDs]' \
     '(-c --cover)'{-c,--cover}'[Process cover images]' \
     '(-v --keep-va)'{-v,--keep-va}'[Prevent renaming "Various Artists" to "Compilations"]' \
-    '(-i --ipod)'{-i,--ipod}'[Skip AAC conversions]' \
-    '(-f --flac)'{-f,--flac}'[Skip FLAC conversions]' \
-    '(-p --cp-ipod)'{-p,--cp-ipod}'[Do not copy or move files to ipod-dir]' \
-    '(-l --cp-flac)'{-l,--cp-flac}'[Do not copy or move files to flac-dir]' \
+    '(-a --lossy)'{-a,--lossy}'[Do LOSSY conversions]' \
+    '(-f --lossless)'{-f,--lossless}'[Skip LOSSLESS conversions]' \
+    '(-A --cp-lossy)'{-A,--cp-lossy}'[Do copy or move files to lossy-dir]' \
+    '(-F --cp-lossless)'{-F,--cp-lossless}'[Do not copy or move files to lossless-dir]' \
     ':source directory:_files -/' \
-    '::ipod directory:_files -/' \
-    '::flac directory:_files -/'
+    '::lossy directory:_files -/' \
+    '::lossless directory:_files -/'
 }
 
 _musicmaid "$@"

@@ -25,16 +25,23 @@ Feature rich script that does most of the jobs.
 
 **Encoders:**
 
-Edit these variables in the script to fine tune the encoders options or to set different encoders. By default the lossless encoder is `flac` and the lossy encoder is `qaac`.
+Edit these variables in the _musicmaid.env_ file to fine tune the encoders options or to set different encoders. By default the lossless encoder is `flac` and the lossy encoder is `qaac`.
+
+Use the wildcard `':output'` and `':input'` (including quotes) in the options to specify the output and input file (or directory) paths respectively. musicmaid will replace them with the actual paths when running the encoders.
 
 ```bash
-ENCODER_LOSSY="lossy-encoder"
-ENCODER_LOSSY_OPTIONS="lossy-encoder-options"
-ENCODER_LOSSY_EXT="lossy-extension"
-ENCODER_LOSSLESS="lossless-encoder"
-ENCODER_LOSSLESS_OPTIONS="lossless-encoder-options"
-ENCODER_LOSSLESS_EXT="lossless-extension"
-ENCODER_WINE="wine"
+# lossy encoder
+ENCODER_LOSSY="$HOME/.wine/drive_c/qaac/qaac.exe"
+ENCODER_LOSSY_OPTIONS="--tvbr 100 --quality 2 --gapless-mode 2 --silent -d ':output' ':input'"
+ENCODER_LOSSY_EXT="m4a" # extension without dot
+
+# lossless encoder
+ENCODER_LOSSLESS="flac"
+ENCODER_LOSSLESS_OPTIONS="-V --best -j1 --silent -o ':output' -- ':input'"
+ENCODER_LOSSLESS_EXT="flac" # extension without dot
+
+# wine and its flags
+ENCODER_WINE="WINEDEBUG=-all wine"
 ```
 
 **Options:**
@@ -47,9 +54,13 @@ ENCODER_WINE="wine"
 - `-m, --rip-multi` -- Rip multiple CDs into "_source/mm_cd_rip_" before operations
 - `-v, --keep-va` -- Don't rename "_Various Artists_" folder to "_Compilations_"
 - `-c, --cover` -- Process cover images in the _source_ directory
+- `-e, --env` -- Output default encoders configuration to _~/.config/musicmaid.env_
+- `-s, --silent` -- Suppress non-error output. Also uses _xargs_ instead of _GNU Parallel_ for parallel processing
 - `-h, --help` -- Show help message
 
 **Dependencies:** GNU Parallel, abcde, ImageMagick
+
+**NOTE:** _xargs_ will be used instead of _GNU Parallel_ if the dependency is not found!
 
 ---
 
@@ -61,9 +72,9 @@ Adapts playlists created by iTunes for RockBox compatibility and viceversa.
 
 **Options:**
 
-- `from` - The type of playlist to convert from
-- `to` - The type of playlist to convert to
-- `file` - Path to a playlist file or a directory containing playlist files
+- `from` -- The type of playlist to convert from
+- `to` -- The type of playlist to convert to
+- `file` -- Path to a playlist file or a directory containing playlist files
 
 **Valid types:**  `ipod`  `itunes`
 
@@ -77,9 +88,9 @@ Converts audio files downloaded with yt-dlp to MP3 format. It can also cut audio
 
 **Options:**
 
-- `file` - Path to the audio file
-- `start_seconds` - Start time in seconds
-- `end_seconds` - End time in seconds
+- `file` -- Path to the audio file
+- `start_seconds` -- Start time in seconds
+- `end_seconds` -- End time in seconds
 
 ---
 

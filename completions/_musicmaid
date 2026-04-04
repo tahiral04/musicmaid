@@ -14,6 +14,8 @@ _musicmaid() {
     '(-f --lossless)'{-f,--lossless}'[Skip LOSSLESS conversions]' \
     '(-A --cp-lossy)'{-A,--cp-lossy}'[Do copy or move files to lossy-dir]' \
     '(-F --cp-lossless)'{-F,--cp-lossless}'[Do not copy or move files to lossless-dir]' \
+    '(-e --env)'{-e,--env}'[Output default encoders configuration to ~/.config/musicmaid.env]' \
+    '(-s --silent)'{-s,--silent}'[Suppress non-error output. Also uses xargs instead of GNU Parallel for parallel processing]' \
     ':source directory:_files -/' \
     '::lossy directory:_files -/' \
     '::lossless directory:_files -/'

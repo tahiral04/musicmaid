@@ -14,15 +14,6 @@ COLOR_SUCCESS='\033[32m' # green
 COLOR_INFO='\033[33m'    # yellow
 COLOR_ERROR='\033[31m'   # red
 
-# --- ENCODERS ---
-ENCODER_LOSSY="$HOME/.wine/drive_c/qaac/qaac.exe"
-ENCODER_LOSSY_OPTIONS="--tvbr 100 --quality 2 --gapless-mode 2 --silent"
-ENCODER_LOSSY_EXT="m4a"
-ENCODER_LOSSLESS="flac"
-ENCODER_LOSSLESS_OPTIONS="-V --best -j1 --silent"
-ENCODER_LOSSLESS_EXT="flac"
-ENCODER_WINE="WINEDEBUG=-all wine"
-
 # --- OPTIONS ---
 THREAD_NUM=$(getconf _NPROCESSORS_ONLN 2>/dev/null || print 1)
 CONV_LOSSY=0
@@ -38,13 +29,38 @@ COVER_CONVERT_QUALITY=85
 COVER_CROP=(-gravity center -crop 1:1 +repage)
 COVER_DIM="1500x1500"
 COVER_DIM_THUMB="200x200"
+SILENT=0
+USE_XARGS=0
+CREATE_ENV=0
 
 # --- GLOBAL VARIABLES ---
-typeset _MKDIR_LAST_CREATED="" SRC_DIR="" LOSSY_DIR="" LOSSLESS_DIR=""
+typeset _MKDIR_LAST_CREATED="" SRC_DIR="" LOSSY_DIR="" LOSSLESS_DIR="" TMP_FILES=$(mktemp /tmp/mm_tmp_files.XXXXXX)
 
 # ===================
 # ===  FUNCTIONS  ===
 # ===================
+
+write_musicmaid_env() {
+  tee "$1" <<'EOF' >/dev/null
+# --- ENCODERS CONFIGURATION ---
+# use the wildcard ':output' and ':input' (including quotes) in the options to
+# specify the output and input file (or directory) paths respectively.
+# musicmaid will replace them with the actual paths when running the encoders.
+
+# lossy encoder
+ENCODER_LOSSY="$HOME/.wine/drive_c/qaac/qaac.exe"
+ENCODER_LOSSY_OPTIONS="--tvbr 100 --quality 2 --gapless-mode 2 --silent -d ':output' ':input'"
+ENCODER_LOSSY_EXT="m4a" # extension without dot
+
+# lossless encoder
+ENCODER_LOSSLESS="flac"
+ENCODER_LOSSLESS_OPTIONS="-V --best -j1 --silent -o ':output' -- ':input'"
+ENCODER_LOSSLESS_EXT="flac" # extension without dot
+
+# wine and its flags
+ENCODER_WINE="WINEDEBUG=-all wine"
+EOF
+}
 
 print_help() {
   cat <<EOF
@@ -67,6 +83,10 @@ Options:
   -f, --lossless          Skip LOSSLESS conversions
   -A, --cp-lossy          Do copy or move files to lossy-dir
   -F, --cp-lossless       Don't copy or move files to lossless-dir
+  -e, --env               Output default encoders configuration to
+                          ~/.config/musicmaid.env
+  -s, --silent            Suppress non-error output. Also uses xargs instead of
+                          GNU Parallel for parallel processing
 
 Dependencies:
   GNU Parallel   Parallel file conversion
@@ -81,25 +101,28 @@ _print_color() {
   print
 }
 
-print_success() { _print_color "$COLOR_SUCCESS" "[SUCCESS]" "$@"; }
-print_info() { _print_color "$COLOR_INFO" "[INFO]" "$@"; }
-print_error() { { _print_color "$COLOR_ERROR" "[ERROR]" "$@"; } >&2; }
+print_success() { (( !SILENT )) && _print_color "$COLOR_SUCCESS" "[OKI]" "$@"; }
+print_info() { (( !SILENT )) && _print_color "$COLOR_INFO" "[INF]" "$@"; }
+print_error() { { _print_color "$COLOR_ERROR" "[ERR]" "$@"; } >&2; }
 
-_cleanup_tmp_files() { rm -f /tmp/mm_abcde.* /tmp/mm_cover.* 2>/dev/null; }
+add_tmp_file() { print "$1" >> "$TMP_FILES"; }
+_cleanup_tmp_files() { xargs -I{} sh -c 'rm -f "{}"' < "$TMP_FILES"; rm -f "$TMP_FILES"; }
 
 # Caches the last created directory to avoid multiple mkdir calls for the same path.
-# Usage: _mkdir_cache "directory"
-_mkdir_cache() {
-  [[ $1 != $_MKDIR_LAST_CREATED ]] && { mkdir -p "$1"; _MKDIR_LAST_CREATED=$1; }
-}
+# Usage: mkdir_cache "directory"
+mkdir_cache() { [[ $1 != $_MKDIR_LAST_CREATED ]] && { mkdir -p "$1"; _MKDIR_LAST_CREATED=$1; } }
 
-_ask_mkdir() {
+ask_mkdir() {
+  if (( SILENT )); then
+    print_error "Directory \"$1\" does not exist"
+    exit 1
+  fi
   print_info "Directory does not exist:" "$1"
   read -q "?Do you want to create it? [y/N] "
   local ans=$?
   print
   if (( ans == 0 )); then
-    _mkdir_cache "$1" || { print_error "Can't create directory \"$1\""; exit 1; }
+    mkdir_cache "$1" || { print_error "Can't create directory \"$1\""; exit 1; }
   else
     print_error "Missing or invalid directory \"$1\""
     exit 1
@@ -109,7 +132,7 @@ _ask_mkdir() {
 parse_parameters() {
   (( $# == 0 )) && { print_error "Too few arguments. Use '-h' or '--help' to see how to use this script"; exit 1; }
 
-  local -a opt_help opt_lossy opt_lossless opt_cp_lossy opt_cp_lossless opt_rip opt_rip_multi opt_keep_va opt_cover
+  local -a opt_help opt_lossy opt_lossless opt_cp_lossy opt_cp_lossless opt_rip opt_rip_multi opt_keep_va opt_cover opt_silent opt_env
   zparseopts -D -F -- \
     h=opt_help        -help=opt_help \
     a=opt_lossy       -lossy=opt_lossy \
@@ -120,6 +143,8 @@ parse_parameters() {
     m=opt_rip_multi   -rip-multi=opt_rip_multi \
     v=opt_keep_va     -keep-va=opt_keep_va \
     c=opt_cover       -cover=opt_cover \
+    s=opt_silent      -silent=opt_silent \
+    e=opt_env         -env=opt_env \
     2>/dev/null || { print_error "Unknown option: $1"; exit 1; }
 
   (( ${#opt_help} )) && { print_help; exit 0; }
@@ -131,6 +156,8 @@ parse_parameters() {
   (( ${#opt_rip_multi} )) && RIP_MULTI_CD=1
   (( ${#opt_keep_va} )) && KEEP_VA=1
   (( ${#opt_cover} )) && COVER_PROCESS=1
+  (( ${#opt_silent} )) && { SILENT=1; USE_XARGS=1; }
+  (( ${#opt_env} )) && { CREATE_ENV=1; }
 
   if (( $# > 0 )); then SRC_DIR=$1; shift; fi
   if (( $# > 0 && (CONV_LOSSY || CP_LOSSY) )); then LOSSY_DIR=$1; shift; fi
@@ -145,21 +172,26 @@ parse_parameters() {
   SRC_DIR=$(realpath "$SRC_DIR")/
 
   LOSSY_DIR=${LOSSY_DIR:-$SRC_DIR}
-  [[ ! -d $LOSSY_DIR ]] && _ask_mkdir "$LOSSY_DIR"
+  [[ ! -d $LOSSY_DIR ]] && ask_mkdir "$LOSSY_DIR"
   LOSSY_DIR=$(realpath "$LOSSY_DIR")/
 
   LOSSLESS_DIR=${LOSSLESS_DIR:-$SRC_DIR}
-  [[ ! -d $LOSSLESS_DIR ]] && _ask_mkdir "$LOSSLESS_DIR"
+  [[ ! -d $LOSSLESS_DIR ]] && ask_mkdir "$LOSSLESS_DIR"
   LOSSLESS_DIR=$(realpath "$LOSSLESS_DIR")/
 
   [[ $SRC_DIR == $LOSSY_DIR ]] && CP_LOSSY=0
   [[ $SRC_DIR == $LOSSLESS_DIR ]] && CP_LOSSLESS=0
+
+  if (( CONV_LOSSY && CONV_LOSSLESS )); then
+    THREAD_NUM=$(( THREAD_NUM / 2 ))
+    (( THREAD_NUM < 1 )) && THREAD_NUM=1
+  fi
 }
 
 # Checks if a command is available. Returns 1 if at least one is missing, 0 otherwise.
 # Variable names containing command paths are also supported.
-# Usage: _check_dependency command [command ...]
-_check_dependency() {
+# Usage: check_dependency command [command ...]
+check_dependency() {
   local missing_dep=0 display_name item_to_check magic_bytes
   for cmd in "$@"; do
     display_name=$cmd
@@ -187,8 +219,8 @@ _check_dependency() {
 }
 
 # Returns target directory in 'base_directory/artist/album/' format.
-# Usage: _get_target_path "file" "base_directory"
-_get_target_path() {
+# Usage: get_target_path "file" "base_directory"
+get_target_path() {
   local file=$1 base_dir=$2
   local album=${file:h:t} artist=${file:h:h:t}
   if (( !KEEP_VA )) && [[ ${(L)artist} == "various artists" ]]; then
@@ -201,57 +233,90 @@ _get_target_path() {
   print -n "$result"
 }
 
+# Usage: convert_parallel <file_list> <encoder> <encoder_options> <encoder_use_wine>
+convert_parallel() {
+  local file_list=$1
+  export enc=$2 enc_opts=$3 enc_use_wine=${4:-0}
+  export COLOR_INFO COLOR_RESET
+  parallel -0 -N2 -j"$THREAD_NUM" '
+    output={1}
+    input={2}
+    printf "%b" "${COLOR_INFO}[CNV]${COLOR_RESET} Converting \"$input\"\n"
+    opts=$(printf "%s" "$enc_opts" | sed "s|:output|$output|g; s|:input|$input|g")
+    if [ "$enc_use_wine" -eq 1 ]; then
+      eval "'"$ENCODER_WINE"' \"$enc\" $opts"
+    else
+      eval "\"$enc\" $opts"
+    fi
+  ' < "$file_list"
+}
+
+# Usage: convert_xargs <file_list> <encoder> <encoder_options> <encoder_use_wine>
+convert_xargs() {
+  local file_list=$1
+  export enc=$2 enc_opts=$3 enc_use_wine=${4:-0}
+  xargs -0 -a "$file_list" -n2 -P"$THREAD_NUM" sh -c '
+    output="$1"
+    input="$2"
+    opts=$(printf "%s" "$enc_opts" | sed "s|:output|$output|g; s|:input|$input|g")
+    if [ "$enc_use_wine" -eq 1 ]; then
+      eval "'"$ENCODER_WINE"' \"$enc\" $opts" >/dev/null
+    else
+      eval "\"$enc\" $opts" >/dev/null
+    fi
+  ' _
+}
+
 convert_lossy() {
-  ! _check_dependency ENCODER_LOSSY parallel && { print_info "Skipping LOSSY conversion due to missing dependencies"; return 1; }
+  ! check_dependency ENCODER_LOSSY && { print_info "Skipping LOSSY conversion due to missing dependencies"; return 1; }
+  ! check_dependency parallel && { print_info "GNU Parallel not found. Falling back to xargs..."; USE_XARGS=1; }
   
-  export COLOR_INFO COLOR_RESET ENCODER_LOSSY ENCODER_LOSSY_OPTIONS ENCODER_LOSSY_USE_WINE ENCODER_WINE
-  local target_path file
+  local target_path file file_list=$(mktemp /tmp/mm_lossy.XXXXXX)
+  add_tmp_file "$file_list"
+
   for file in $SRC_DIR**/*.(#i)(wav|${ENCODER_LOSSLESS_EXT})(.); do
     [[ -e ${file:r}.$ENCODER_LOSSY_EXT ]] && continue
     [[ ${(L)${file:e}} == ${ENCODER_LOSSLESS_EXT} && ( -e ${file:r}.wav || -e ${file:r}.WAV ) ]] && continue
 
-    target_path=$(_get_target_path "$file" "$LOSSY_DIR")
-    _mkdir_cache "$target_path"
-    printf '%s\0%s\0' "$target_path" "$file"
-  done | parallel -0 -N2 -j"$THREAD_NUM" --colsep '\0' '
-    dest_dir={1}
-    file={2}
-    printf '%b' "${COLOR_INFO}[LOSSY]${COLOR_RESET} Converting \"$file\"\n"
-    if [ "$ENCODER_LOSSY_USE_WINE" -eq 1 ]; then
-      '"$ENCODER_WINE"' "$ENCODER_LOSSY" '"$ENCODER_LOSSY_OPTIONS"' -d "$dest_dir" "$file"
-    else
-      "$ENCODER_LOSSY" '"$ENCODER_LOSSY_OPTIONS"' -d "$dest_dir" "$file"
-    fi
-  '
+    target_path=$(get_target_path "$file" "$LOSSY_DIR")
+    mkdir_cache "$target_path"
+    printf '%s\0%s\0' "$target_path" "$file" >> "$file_list"
+  done
+
+
+  if (( USE_XARGS )); then
+    convert_xargs "$file_list" "$ENCODER_LOSSY" "$ENCODER_LOSSY_OPTIONS" "$ENCODER_LOSSY_USE_WINE"
+  else
+    convert_parallel "$file_list" "$ENCODER_LOSSY" "$ENCODER_LOSSY_OPTIONS" "$ENCODER_LOSSY_USE_WINE"
+  fi
 }
 
 convert_lossless() {
-  ! _check_dependency ENCODER_LOSSLESS parallel && { print_info "Skipping LOSSLESS conversion due to missing dependencies"; return 1; }
+  ! check_dependency ENCODER_LOSSLESS && { print_info "Skipping LOSSLESS conversion due to missing dependencies"; return 1; }
+  ! check_dependency parallel && { print_info "GNU Parallel not found. Falling back to xargs..."; USE_XARGS=1; }
 
-  export COLOR_INFO COLOR_RESET ENCODER_LOSSLESS ENCODER_LOSSLESS_OPTIONS ENCODER_LOSSLESS_USE_WINE ENCODER_WINE
-  local target_path file
+  local target_path file file_list=$(mktemp /tmp/mm_lossless.XXXXXX)
+  add_tmp_file "$file_list"
+
   for file in $SRC_DIR**/*.(#i)wav(.); do
     [[ -e ${file:r}.$ENCODER_LOSSLESS_EXT ]] && continue
 
-    target_path=$(_get_target_path "$file" "$LOSSLESS_DIR")
-    _mkdir_cache "$target_path"
-    printf '%s\0%s\0' "${target_path}${file:t:r}.${ENCODER_LOSSLESS_EXT}" "$file"
-  done | parallel -0 -N2 -j"$THREAD_NUM" --colsep '\0' '
-    output_file={1}
-    input_file={2}
-    printf '%b' "${COLOR_INFO}[LOSSLESS]${COLOR_RESET} Converting \"$input_file\"\n"
-    if [ "$ENCODER_LOSSLESS_USE_WINE" -eq 1 ]; then
-      '"$ENCODER_WINE"' "$ENCODER_LOSSLESS" '"$ENCODER_LOSSLESS_OPTIONS"' -o "$output_file" -- "$input_file"
-    else
-      "$ENCODER_LOSSLESS" '"$ENCODER_LOSSLESS_OPTIONS"' -o "$output_file" -- "$input_file"
-    fi
-  '
+    target_path=$(get_target_path "$file" "$LOSSLESS_DIR")
+    mkdir_cache "$target_path"
+    printf '%s\0%s\0' "${target_path}${file:t:r}.${ENCODER_LOSSLESS_EXT}" "$file" >> "$file_list"
+  done
+
+  if (( USE_XARGS )); then
+    convert_xargs "$file_list" "$ENCODER_LOSSLESS" "$ENCODER_LOSSLESS_OPTIONS" "$ENCODER_LOSSLESS_USE_WINE"
+  else
+    convert_parallel "$file_list" "$ENCODER_LOSSLESS" "$ENCODER_LOSSLESS_OPTIONS" "$ENCODER_LOSSLESS_USE_WINE"
+  fi
 }
 
 _copy_lossy() {
   local file=$1
-  local target_path=$(_get_target_path "$file" "$LOSSY_DIR")
-  _mkdir_cache "$target_path"
+  local target_path=$(get_target_path "$file" "$LOSSY_DIR")
+  mkdir_cache "$target_path"
 
   if [[ -e ${file:r}.wav  || -e ${file:r}.WAV || \
         -e ${file:r}.${ENCODER_LOSSLESS_EXT} || -e ${file:r}.${(U)ENCODER_LOSSLESS_EXT} ]]; then
@@ -266,8 +331,8 @@ _copy_lossy() {
 
 _copy_lossless() {
   local file=$1
-  local target_path=$(_get_target_path "$file" "$LOSSLESS_DIR")
-  _mkdir_cache "$target_path"
+  local target_path=$(get_target_path "$file" "$LOSSLESS_DIR")
+  mkdir_cache "$target_path"
 
   if [[ ${(L)${file:e}} == ${ENCODER_LOSSLESS_EXT} ]]; then
     if [[ -e ${file:r}.wav || -e ${file:r}.WAV ]]; then
@@ -299,10 +364,10 @@ copy_files() {
 }
 
 rip_cd() {
-  ! _check_dependency abcde && { print_info "Skipping CD rip due to missing dependencies"; return 1; }
+  ! check_dependency abcde && { print_info "Skipping CD rip due to missing dependencies"; return 1; }
   local conf_file=$(mktemp /tmp/mm_abcde.XXXXXX.conf)
+  add_tmp_file "$conf_file"
   write_abcde_conf "$conf_file"
-  print -n "OUTPUTDIR=\"${SRC_DIR}${RIP_CD_FOLDER}\"" >> "$conf_file"
 
   print_info "Ripping CD to \"${SRC_DIR}${RIP_CD_FOLDER}\" ..."
   abcde -c "$conf_file"
@@ -312,10 +377,10 @@ rip_cd() {
 }
 
 rip_multi_cd() {
-  ! _check_dependency abcde && { print_info "Skipping multi CD rip due to missing dependencies"; return 1; }
+  ! check_dependency abcde && { print_info "Skipping multi CD rip due to missing dependencies"; return 1; }
   local conf_file=$(mktemp /tmp/mm_abcde.XXXXXX.conf)
+  add_tmp_file "$conf_file"
   write_abcde_conf "$conf_file"
-  print -n "OUTPUTDIR=\"${SRC_DIR}${RIP_CD_FOLDER}\"" >> "$conf_file"
 
   print_info "Ripping CDs to \"${SRC_DIR}${RIP_CD_FOLDER}\" ..."
   while true; do
@@ -335,7 +400,6 @@ rip_multi_cd() {
 write_abcde_conf() {
   tee "$1" <<'EOF' >/dev/null
 LOWDISK=y
-EXTRAVERBOSE=2
 EJECTCD=y
 CDDBMETHOD=cddb
 CDDBURL="http://gnudb.gnudb.org/~cddb/cddb.cgi"
@@ -356,11 +420,18 @@ VAONETRACKOUTPUTFORMAT='Various Artists/${ALBUMFILE}/${TRACKNUM} ${TRACKFILE}'
 PADTRACKS=y
 mungefilename () { echo "$@" | sed -e 's/^\.*//' | tr -d ":><|*/\"'?[:cntrl:]"; }
 EOF
+  print "OUTPUTDIR=\"${SRC_DIR}${RIP_CD_FOLDER}\"" >> "$1"
+  if (( SILENT )); then
+    print "EXTRAVERBOSE=0" >> "$1"
+  else
+    print "EXTRAVERBOSE=1" >> "$1"
+  fi
 }
 
 cover_processor() {
-  ! _check_dependency magick && { print_info "Skipping cover processing due to missing dependencies"; return 1; }
+  ! check_dependency magick && { print_info "Skipping cover processing due to missing dependencies"; return 1; }
   local tmp_image=$(mktemp /tmp/mm_cover.XXXXXX.jpg)
+  add_tmp_file "$tmp_image"
 
   local file
   for file in $SRC_DIR**/*(#i)cover.(png|jpg|jpeg|webp)(.); do
@@ -395,17 +466,24 @@ cover_processor() {
 trap _cleanup_tmp_files EXIT INT TERM
 parse_parameters "$@"
 
-(( RIP_CD )) && { rip_cd && print; }
-(( RIP_MULTI_CD )) && { rip_multi_cd && print; }
+(( CREATE_ENV )) && { write_musicmaid_env $HOME/.config/musicmaid.env; print_info "Created default encoders configuration at \"$HOME/.config/musicmaid.env\""; }
+
+[[ ! -f "$HOME/.config/musicmaid.env" ]] && { write_musicmaid_env "$HOME/.config/musicmaid.env"; print_info "Created default encoders configuration at \"$HOME/.config/musicmaid.env\""; }
+set -a
+source "$HOME/.config/musicmaid.env"
+set +a
+
+(( RIP_CD )) && { rip_cd; (( !SILENT )) && print; }
+(( RIP_MULTI_CD )) && { rip_multi_cd; (( !SILENT )) && print; }
 
 (( CONV_LOSSY || CONV_LOSSLESS || CP_LOSSY || CP_LOSSLESS || COVER_PROCESS )) && print_info "Scanning directory..."
 
-(( CONV_LOSSY )) && { convert_lossy && print; } &
-(( CONV_LOSSLESS )) && { convert_lossless && print; } &
+(( CONV_LOSSY )) && convert_lossy &
+(( CONV_LOSSLESS )) && convert_lossless &
 wait
 
-(( CP_LOSSY || CP_LOSSLESS )) && { copy_files && print; }
-(( COVER_PROCESS )) && { cover_processor && print; }
+(( CP_LOSSY || CP_LOSSLESS )) && { copy_files; (( !SILENT )) && print; }
+(( COVER_PROCESS )) && { cover_processor; (( !SILENT )) && print; }
 
 print_success "All done!"
 exit 0

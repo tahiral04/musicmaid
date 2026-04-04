@@ -16,13 +16,19 @@ rsync -rtvPh --modify-window=1 --size-only --delete "$MUSIC" "$IPOD/music/"
 echo "Syncing database files..."
 if [[ -f "$IPOD/.rockbox/database_changelog.txt" ]]; then
     cp "$IPOD/.rockbox/database_changelog.txt" "$RBDIR/.rockbox/"
+    echo "Database changelog copied to build directory."
 else
     echo "No database changelog found on iPod."
     exit 1
 fi
+
+echo "Running Rockbox..."
 (cd "$RBDIR/.." && "$RBUI")
+
 echo "Finalizing database sync..."
 cp "$RBDIR/.rockbox/"database_*.tcd "$IPOD/.rockbox/"
+echo "Database files copied back to iPod."
+
 sync
 echo "Sync complete."
 

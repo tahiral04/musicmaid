@@ -31,7 +31,6 @@ COVER_DIM="1500x1500"
 COVER_DIM_THUMB="200x200"
 SILENT=0
 USE_XARGS=0
-CREATE_ENV=0
 
 # --- GLOBAL VARIABLES ---
 typeset _MKDIR_LAST_CREATED="" SRC_DIR="" LOSSY_DIR="" LOSSLESS_DIR="" TMP_FILES=$(mktemp /tmp/mm_tmp_files.XXXXXX)
@@ -73,20 +72,20 @@ Arguments:
   lossless-dir   Destination directory for LOSSLESS files (defaults to source)
 
 Options:
-  -h, --help              Show this help message and exit
-  -r, --rip               Rip CD into "source/$RIP_CD_FOLDER" before operations
-  -m, --rip-multi         Rip multiple CDs into "source/$RIP_CD_FOLDER" before
-                          operations
-  -c, --cover             Process cover images (resize, convert, compress)
-  -v, --keep-va           Don't rename "Various Artists" to "Compilations"
   -a, --lossy             Do LOSSY conversions
   -f, --lossless          Skip LOSSLESS conversions
   -A, --cp-lossy          Do copy or move files to lossy-dir
   -F, --cp-lossless       Don't copy or move files to lossless-dir
-  -e, --env               Output default encoders configuration to
-                          ~/.config/musicmaid.env
+  -v, --keep-va           Don't rename "Various Artists" to "Compilations"
+  -c, --cover             Process cover images (resize, convert, compress)
+  -r, --rip               Rip CD into "source/$RIP_CD_FOLDER" before operations
+  -m, --rip-multi         Rip multiple CDs into "source/$RIP_CD_FOLDER" before
+                          operations
   -s, --silent            Suppress non-error output. Also uses xargs instead of
                           GNU Parallel for parallel processing
+  -e, --env               Output default encoders configuration to
+                          ~/.config/musicmaid.env and exit
+  -h, --help              Show this help message and exit
 
 Dependencies:
   GNU Parallel   Parallel file conversion
@@ -95,6 +94,9 @@ Dependencies:
 EOF
 }
 
+# Prints a colored message. Only the first message is colored, the others are
+# printed as is.
+# Usage: _print_color <color> <message> [<message> ...]
 _print_color() {
   print -n "${1}${2}${COLOR_RESET}"; shift 2
   (( $# > 0 )) && print -n " $*"
@@ -157,11 +159,17 @@ parse_parameters() {
   (( ${#opt_keep_va} )) && KEEP_VA=1
   (( ${#opt_cover} )) && COVER_PROCESS=1
   (( ${#opt_silent} )) && { SILENT=1; USE_XARGS=1; }
-  (( ${#opt_env} )) && { CREATE_ENV=1; }
+  if (( ${#opt_env} )); then
+    write_musicmaid_env "$HOME/.config/musicmaid.env"
+    print_info "Created default encoders configuration at \"$HOME/.config/musicmaid.env\""
+    exit 0
+  fi
 
-  if (( $# > 0 )); then SRC_DIR=$1; shift; fi
-  if (( $# > 0 && (CONV_LOSSY || CP_LOSSY) )); then LOSSY_DIR=$1; shift; fi
-  if (( $# > 0 && (CONV_LOSSLESS || CP_LOSSLESS) )); then LOSSLESS_DIR=$1; shift; fi
+  [[ ! -f "$HOME/.config/musicmaid.env" ]] && { write_musicmaid_env "$HOME/.config/musicmaid.env"; print_info "Created default encoders configuration at \"$HOME/.config/musicmaid.env\""; }
+
+  (( $# > 0 )) && { SRC_DIR=$1; shift; }
+  (( $# > 0 && (CONV_LOSSY || CP_LOSSY) )) && { LOSSY_DIR=$1; shift; }
+  (( $# > 0 && (CONV_LOSSLESS || CP_LOSSLESS) )) && { LOSSLESS_DIR=$1; shift; }
   (( $# > 0 )) && { print_error "Too many arguments"; exit 1; }
 
   if (( CONV_LOSSY || CONV_LOSSLESS || CP_LOSSY || CP_LOSSLESS || RIP_CD || COVER_PROCESS )) && \
@@ -233,15 +241,19 @@ get_target_path() {
   print -n "$result"
 }
 
-# Usage: convert_parallel <file_list> <encoder> <encoder_options> <encoder_use_wine>
+# Usage: convert_parallel <file_list> <encoder> <encoder_options> <encoder_use_wine> <is_lossy>
 convert_parallel() {
   local file_list=$1
-  export enc=$2 enc_opts=$3 enc_use_wine=${4:-0}
+  export enc=$2 enc_opts=$3 enc_use_wine=${4:-0} is_lossy=${5:-0}
   export COLOR_INFO COLOR_RESET
   parallel -0 -N2 -j"$THREAD_NUM" '
     output={1}
     input={2}
-    printf "%b" "${COLOR_INFO}[CNV]${COLOR_RESET} Converting \"$input\"\n"
+    if [ "$is_lossy" -eq 1 ]; then
+      printf "%b" "${COLOR_INFO}[CNV]${COLOR_RESET} Lossy: \"$input\"\n"
+    else
+      printf "%b" "${COLOR_INFO}[CNV]${COLOR_RESET} Lossless: \"$input\"\n"
+    fi
     opts=$(printf "%s" "$enc_opts" | sed "s|:output|$output|g; s|:input|$input|g")
     if [ "$enc_use_wine" -eq 1 ]; then
       eval "'"$ENCODER_WINE"' \"$enc\" $opts"
@@ -287,7 +299,7 @@ convert_lossy() {
   if (( USE_XARGS )); then
     convert_xargs "$file_list" "$ENCODER_LOSSY" "$ENCODER_LOSSY_OPTIONS" "$ENCODER_LOSSY_USE_WINE"
   else
-    convert_parallel "$file_list" "$ENCODER_LOSSY" "$ENCODER_LOSSY_OPTIONS" "$ENCODER_LOSSY_USE_WINE"
+    convert_parallel "$file_list" "$ENCODER_LOSSY" "$ENCODER_LOSSY_OPTIONS" "$ENCODER_LOSSY_USE_WINE" "1"
   fi
 }
 
@@ -466,9 +478,6 @@ cover_processor() {
 trap _cleanup_tmp_files EXIT INT TERM
 parse_parameters "$@"
 
-(( CREATE_ENV )) && { write_musicmaid_env $HOME/.config/musicmaid.env; print_info "Created default encoders configuration at \"$HOME/.config/musicmaid.env\""; }
-
-[[ ! -f "$HOME/.config/musicmaid.env" ]] && { write_musicmaid_env "$HOME/.config/musicmaid.env"; print_info "Created default encoders configuration at \"$HOME/.config/musicmaid.env\""; }
 set -a
 source "$HOME/.config/musicmaid.env"
 set +a

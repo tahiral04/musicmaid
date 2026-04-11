@@ -94,3 +94,9 @@ Adapts playlists created by iTunes for RockBox compatibility and viceversa.
 Syncs the music library with the iPod and generates the updated Rockbox database.
 
 **Usage:** `ipodsync`
+
+## cutaudio-noenc
+
+Cuts audio without re-encoding the file.
+
+**Usage:** `cutaudio-noenc <file> [start_seconds] [end_seconds]`

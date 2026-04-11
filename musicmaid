@@ -76,6 +76,19 @@ ENCODER_WINE="WINEDEBUG=-all wine"
 EOF
 }
 
+validate_env() {
+  local error=0
+  local required=(ENCODER_LOSSY ENCODER_LOSSY_OPTIONS ENCODER_LOSSY_EXT
+                  ENCODER_LOSSLESS ENCODER_LOSSLESS_OPTIONS ENCODER_LOSSLESS_EXT
+                  ENCODER_WINE)
+  for var in $required; do
+    [[ -z ${(P)var} ]] && { print_error "$var is not set in musicmaid.env"; error=1; }
+  done
+  (( ${#LIB_FORMAT_LOSSY} == 0 )) && { print_error "LIB_FORMAT_LOSSY is empty, check musicmaid.env"; error=1; }
+  (( ${#LIB_FORMAT_LOSSLESS} == 0 )) && { print_error "LIB_FORMAT_LOSSLESS is empty, check musicmaid.env"; error=1; }
+  (( error )) && exit 1
+}
+
 print_help() {
   cat <<EOF
 Usage:
@@ -517,6 +530,7 @@ fi
 set -a
 source "$HOME/.config/musicmaid.env"
 set +a
+validate_env()
 
 (( RIP_CD )) && { rip_cd; (( !SILENT )) && print; }
 (( RIP_MULTI_CD )) && { rip_multi_cd; (( !SILENT )) && print; }

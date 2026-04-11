@@ -41,20 +41,35 @@ typeset _MKDIR_LAST_CREATED="" SRC_DIR="" LOSSY_DIR="" LOSSLESS_DIR="" TMP_FILES
 
 write_musicmaid_env() {
   tee "$1" <<'EOF' >/dev/null
+# --- GENERAL CONFIGURATION ---
+# List of lossy and lossless formats present in the user's collection.
+# To add new formats just include them in the corresponding list.
+# If converting to a new format with the encoders specified below, make sure
+# to also add the new format's extension to the corresponding list below.
+
+# !! DO NOT WRITE QUOTES OR DOTS !!
+#   wrong: LIB_FORMAT_LOSSY=("mp3" .flac)
+#   right: LIB_FORMAT_LOSSY=(mp3 flac)
+
+LIB_FORMAT_LOSSY=(m4a mp3 opus)
+LIB_FORMAT_LOSSLESS=(flac)
+
+
 # --- ENCODERS CONFIGURATION ---
-# use the wildcard ':output' and ':input' (including quotes) in the options to
-# specify the output and input file (or directory) paths respectively.
-# musicmaid will replace them with the actual paths when running the encoders.
+# Use the wildcards ':output' and ':input' (including single quotes) in the
+# options to specify the output and input file (or directory) paths
+# respectively. musicmaid will replace them with the actual paths when running
+# the encoders.
 
 # lossy encoder
 ENCODER_LOSSY="$HOME/.wine/drive_c/qaac/qaac.exe"
 ENCODER_LOSSY_OPTIONS="--tvbr 100 --quality 2 --gapless-mode 2 --silent -d ':output' ':input'"
-ENCODER_LOSSY_EXT="m4a" # extension without dot
+ENCODER_LOSSY_EXT="m4a" # encoder's output extension without dot
 
 # lossless encoder
 ENCODER_LOSSLESS="flac"
 ENCODER_LOSSLESS_OPTIONS="-V --best -j1 --silent -o ':output' -- ':input'"
-ENCODER_LOSSLESS_EXT="flac" # extension without dot
+ENCODER_LOSSLESS_EXT="flac" # encoder's output extension without dot
 
 # wine and its flags
 ENCODER_WINE="WINEDEBUG=-all wine"
@@ -164,8 +179,6 @@ parse_parameters() {
     print_info "Created default encoders configuration at \"$HOME/.config/musicmaid.env\""
     exit 0
   fi
-
-  [[ ! -f "$HOME/.config/musicmaid.env" ]] && { write_musicmaid_env "$HOME/.config/musicmaid.env"; print_info "Created default encoders configuration at \"$HOME/.config/musicmaid.env\""; }
 
   (( $# > 0 )) && { SRC_DIR=$1; shift; }
   (( $# > 0 && (CONV_LOSSY || CP_LOSSY) )) && { LOSSY_DIR=$1; shift; }
@@ -286,9 +299,14 @@ convert_lossy() {
   local target_path file file_list=$(mktemp /tmp/mm_lossy.XXXXXX)
   add_tmp_file "$file_list"
 
-  for file in $SRC_DIR**/*.(#i)(wav|${ENCODER_LOSSLESS_EXT})(.); do
-    [[ -e ${file:r}.$ENCODER_LOSSY_EXT ]] && continue
-    [[ ${(L)${file:e}} == ${ENCODER_LOSSLESS_EXT} && ( -e ${file:r}.wav || -e ${file:r}.WAV ) ]] && continue
+  for file in $SRC_DIR**/*.(#i)(wav|${(j:|:)LIB_FORMAT_LOSSLESS})(.); do
+    local lossy_found=0
+    for ext in $LIB_FORMAT_LOSSLESS; do
+      [[ -e ${file:r}.$ext || -e ${file:r}.${(U)ext} ]] && { lossy_found=1; break; }
+    done
+
+    [[ -e ${file:r}.$ENCODER_LOSSY_EXT || $lossy_found -eq 1 ]] && continue
+    (( ${LIB_FORMAT_LOSSLESS[(Ie)${(L)${file:e}}]} )) && [[ -e ${file:r}.wav || -e ${file:r}.WAV ]] && continue
 
     target_path=$(get_target_path "$file" "$LOSSY_DIR")
     mkdir_cache "$target_path"
@@ -311,7 +329,12 @@ convert_lossless() {
   add_tmp_file "$file_list"
 
   for file in $SRC_DIR**/*.(#i)wav(.); do
-    [[ -e ${file:r}.$ENCODER_LOSSLESS_EXT ]] && continue
+    local lossless_found=0
+    for ext in $LIB_FORMAT_LOSSLESS; do
+      [[ -e ${file:r}.$ext || -e ${file:r}.${(U)ext} ]] && { lossless_found=1; break; }
+    done
+
+    [[ -e ${file:r}.$ENCODER_LOSSLESS_EXT || $lossless_found -eq 1 ]] && continue
 
     target_path=$(get_target_path "$file" "$LOSSLESS_DIR")
     mkdir_cache "$target_path"
@@ -330,8 +353,12 @@ _copy_lossy() {
   local target_path=$(get_target_path "$file" "$LOSSY_DIR")
   mkdir_cache "$target_path"
 
-  if [[ -e ${file:r}.wav  || -e ${file:r}.WAV || \
-        -e ${file:r}.${ENCODER_LOSSLESS_EXT} || -e ${file:r}.${(U)ENCODER_LOSSLESS_EXT} ]]; then
+  local lossless_found=0
+  for ext in $LIB_FORMAT_LOSSLESS; do
+    [[ -e ${file:r}.$ext || -e ${file:r}.${(U)ext} ]] && { lossless_found=1; break; }
+  done
+
+  if [[ -e ${file:r}.wav  || -e ${file:r}.WAV ]] || (( lossless_found )); then
     print_info "Moving lossy" "\"$file\" -> \"$target_path\""
     mv "$file" "$target_path"
     return 0
@@ -346,7 +373,7 @@ _copy_lossless() {
   local target_path=$(get_target_path "$file" "$LOSSLESS_DIR")
   mkdir_cache "$target_path"
 
-  if [[ ${(L)${file:e}} == ${ENCODER_LOSSLESS_EXT} ]]; then
+  if (( ${LIB_FORMAT_LOSSLESS[(Ie)${(L)${file:e}}]} )) || [[ ${(L)${file:e}} == ${ENCODER_LOSSLESS_EXT} ]]; then
     if [[ -e ${file:r}.wav || -e ${file:r}.WAV ]]; then
       print_info "Moving lossless" "\"$file\" -> \"$target_path\""
       mv "$file" "$target_path"
@@ -359,7 +386,12 @@ _copy_lossless() {
 
   local target_file_basename="${target_path}${file:t:r}"
   local -a target_file_matches=( "${target_file_basename}".* )
-  [[ -e ${file:r}.${ENCODER_LOSSLESS_EXT} || -e ${file:r}.${(U)ENCODER_LOSSLESS_EXT} || ${#target_file_matches} -gt 0 ]] && return 0
+  local lossless_found=0
+  for ext in $LIB_FORMAT_LOSSLESS; do
+    [[ -e ${file:r}.$ext || -e ${file:r}.${(U)ext} ]] && { lossless_found=1; break; }
+  done
+
+  (( lossless_found || ${#target_file_matches} > 0 )) && return 0
 
   print_info "Copying lossless" "\"$file\" -> \"$target_path\""
   cp "$file" "$target_path"
@@ -367,9 +399,9 @@ _copy_lossless() {
 
 copy_files() {
   local file
-  for file in $SRC_DIR**/*.(#i)(${ENCODER_LOSSY_EXT}|${ENCODER_LOSSLESS_EXT}|mp3)(.); do
+  for file in $SRC_DIR**/*.(#i)(${(j:|:)LIB_FORMAT_LOSSY}|${(j:|:)LIB_FORMAT_LOSSLESS})(.); do
     (( CP_LOSSLESS )) && _copy_lossless "$file"
-    if (( CP_LOSSY )) && [[ -e $file && ${(L)${file:e}} != ${ENCODER_LOSSLESS_EXT} ]]; then
+    if (( CP_LOSSY )) && [[ -e $file ]] && ! (( ${LIB_FORMAT_LOSSLESS[(Ie)${(L)${file:e}}]} )); then
       _copy_lossy "$file"
     fi
   done
@@ -478,6 +510,10 @@ cover_processor() {
 trap _cleanup_tmp_files EXIT INT TERM
 parse_parameters "$@"
 
+if [[ ! -f "$HOME/.config/musicmaid.env" ]]; then
+  write_musicmaid_env "$HOME/.config/musicmaid.env"
+  print_info "Created default encoders configuration at \"$HOME/.config/musicmaid.env\""
+fi
 set -a
 source "$HOME/.config/musicmaid.env"
 set +a

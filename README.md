@@ -6,13 +6,9 @@ Completions are also available (currently only for zsh). You can install them by
 
 Run `install-completions help` to get more information.
 
-## Scripts
-
-### musicmaid
+## musicmaid
 
 Feature rich script that does most of the jobs.
-
-**Features:**
 
 - Convert WAV files to lossless format (by default flac)
 - Convert WAV/FLAC files to lossy format (by default aac)
@@ -23,28 +19,45 @@ Feature rich script that does most of the jobs.
 
 **Usage:** `musicmaid [options] <source> [lossy-dir] [lossless-dir]`
 
-**Encoders:**
+### Configuration
 
-Edit these variables in the _musicmaid.env_ file to fine tune the encoders options or to set different encoders. By default the lossless encoder is `flac` and the lossy encoder is `qaac`.
+Edit these variables in the _musicmaid.env_ file to fine tune the script's behaviour.
 
-Use the wildcard `':output'` and `':input'` (including quotes) in the options to specify the output and input file (or directory) paths respectively. musicmaid will replace them with the actual paths when running the encoders.
+The below lists contain lossy and lossless formats present in the user's collection.
+To add new formats just include them in the corresponding list.
+If converting to a new format with the encoders specified below, make sure to also add the new format's extension to the corresponding list below.
+
+**!! DO NOT WRITE QUOTES OR DOTS !!**
+
+_wrong_: `LIB_FORMAT_LOSSY=("mp3" .flac)`
+
+_right_: `LIB_FORMAT_LOSSY=(mp3 flac)`
+
+```bash
+LIB_FORMAT_LOSSY=(m4a mp3 opus)
+LIB_FORMAT_LOSSLESS=(flac)
+```
+
+Edit the below variables to change the encoders' options or to set different encoders. By default the lossless encoder is `flac` and the lossy encoder is `qaac`.
+
+Use the wildcards `':output'` and `':input'` (including single quotes) in the options to specify the output and input file (or directory) paths respectively. musicmaid will replace them with the actual paths when running the encoders.
 
 ```bash
 # lossy encoder
 ENCODER_LOSSY="$HOME/.wine/drive_c/qaac/qaac.exe"
 ENCODER_LOSSY_OPTIONS="--tvbr 100 --quality 2 --gapless-mode 2 --silent -d ':output' ':input'"
-ENCODER_LOSSY_EXT="m4a" # extension without dot
+ENCODER_LOSSY_EXT="m4a" # encoder's output extension without dot
 
 # lossless encoder
 ENCODER_LOSSLESS="flac"
 ENCODER_LOSSLESS_OPTIONS="-V --best -j1 --silent -o ':output' -- ':input'"
-ENCODER_LOSSLESS_EXT="flac" # extension without dot
+ENCODER_LOSSLESS_EXT="flac" # encoder's output extension without dot
 
 # wine and its flags
 ENCODER_WINE="WINEDEBUG=-all wine"
 ```
 
-**Options:**
+### Options
 
 - `-a, --lossy` -- Do LOSSY conversions
 - `-f, --lossless` -- Skip LOSSLESS conversions
@@ -62,9 +75,7 @@ ENCODER_WINE="WINEDEBUG=-all wine"
 
 **NOTE:** _xargs_ will be used instead of _GNU Parallel_ if the dependency is not found!
 
----
-
-### playlist-adaptor
+## playlist-adaptor
 
 Adapts playlists created by iTunes for RockBox compatibility and viceversa.
 
@@ -78,23 +89,7 @@ Adapts playlists created by iTunes for RockBox compatibility and viceversa.
 
 **Valid types:**  `ipod`  `itunes`
 
----
-
-### ytdlp2mp3
-
-Converts audio files downloaded with yt-dlp to MP3 format. It can also cut audio in the beginning and/or the end.
-
-**Usage:** `ytdlp2mp3 <file> [start_seconds] [end_seconds]`
-
-**Options:**
-
-- `file` -- Path to the audio file
-- `start_seconds` -- Start time in seconds
-- `end_seconds` -- End time in seconds
-
----
-
-### ipodsync
+## ipodsync
 
 Syncs the music library with the iPod and generates the updated Rockbox database.
 

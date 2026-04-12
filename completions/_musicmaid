@@ -6,16 +6,16 @@ _musicmaid() {
 
   _arguments -C \
     '(- *)'{-h,--help}'[Show help message and exit]' \
-    '(-r --rip -m --rip-multi)'{-r,--rip}'[Rip CD]' \
-    '(-r --rip -m --rip-multi)'{-m,--rip-multi}'[Rip multiple CDs]' \
-    '(-c --cover)'{-c,--cover}'[Process cover images]' \
-    '(-v --keep-va)'{-v,--keep-va}'[Prevent renaming "Various Artists" to "Compilations"]' \
     '(-a --lossy)'{-a,--lossy}'[Do LOSSY conversions]' \
     '(-f --lossless)'{-f,--lossless}'[Skip LOSSLESS conversions]' \
     '(-A --cp-lossy)'{-A,--cp-lossy}'[Do copy or move files to lossy-dir]' \
     '(-F --cp-lossless)'{-F,--cp-lossless}'[Do not copy or move files to lossless-dir]' \
+    '(-c --cover)'{-c,--cover}'[Process cover images]' \
+    '(-r --rip -m --rip-multi)'{-r,--rip}'[Rip CD]' \
+    '(-r --rip -m --rip-multi)'{-m,--rip-multi}'[Rip multiple CDs]' \
+    '(-v --keep-va)'{-v,--keep-va}'[Prevent renaming "Various Artists" to "Compilations"]' \
     '(-e --env)'{-e,--env}'[Output default encoders configuration to ~/.config/musicmaid.env]' \
-    '(-s --silent)'{-s,--silent}'[Suppress non-error output. Also uses xargs instead of GNU Parallel for parallel processing]' \
+    '(-s --silent)'{-s,--silent}'[Suppress non-error output]' \
     ':source directory:_files -/' \
     '::lossy directory:_files -/' \
     '::lossless directory:_files -/'

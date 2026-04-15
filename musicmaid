@@ -255,15 +255,17 @@ check_dependency() {
 # Returns target directory in 'base_directory/artist/album/' format.
 # Usage: get_target_path "file" "base_directory"
 get_target_path() {
-  local file=$1 base_dir=$2
-  local album=${file:h:t} artist=${file:h:h:t}
-  if (( !KEEP_VA )) && [[ ${(L)artist} == "various artists" ]]; then
-    artist="Compilations"
+  local file=$1 base_dir=$2 rip_dir="${RIP_CD_FOLDER}/"
+  local rel_dir=${${file:h}#$SRC_DIR}
+  rel_dir=${rel_dir#$rip_dir}
+
+  if (( !KEEP_VA )) && [[ -n "$rel_dir" ]]; then
+    local artist=${rel_dir%%/*}
+    [[ ${(L)artist} == "various artists" ]] && rel_dir="Compilations${rel_dir#$artist}"
   fi
 
   local result=$base_dir
-  [[ $artist != "." && $artist != "/" ]] && result+="${artist}/"
-  [[ $album  != "." && $album  != "/" ]] && result+="${album}/"
+  [[ -n $rel_dir ]] && result+="${rel_dir}/"
   print -n "$result"
 }
 

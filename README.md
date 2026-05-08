@@ -40,17 +40,17 @@ LIB_FORMAT_LOSSLESS=(flac)
 
 Edit the below variables to change the encoders' options or to set different encoders. By default the lossless encoder is `flac` and the lossy encoder is `qaac`.
 
-Use the wildcards `':output'` and `':input'` (including single quotes) in the options to specify the output and input file (or directory) paths respectively. musicmaid will replace them with the actual paths when running the encoders.
+Use the wildcards `:output` and `:input` in the options to specify the output and input file (or directory) paths respectively. `musicmaid` will replace them with the actual paths when running the encoders.
 
 ```bash
 # lossy encoder
 ENCODER_LOSSY="$HOME/.wine/drive_c/qaac/qaac.exe"
-ENCODER_LOSSY_OPTIONS="--tvbr 100 --quality 2 --gapless-mode 2 --silent -d ':output' ':input'"
+ENCODER_LOSSY_OPTIONS="--tvbr 100 --quality 2 --gapless-mode 2 --silent -d :output :input"
 ENCODER_LOSSY_EXT="m4a" # encoder's output extension without dot
 
 # lossless encoder
 ENCODER_LOSSLESS="flac"
-ENCODER_LOSSLESS_OPTIONS="-V --best -j1 --silent -o ':output' -- ':input'"
+ENCODER_LOSSLESS_OPTIONS="-V --best -j1 --silent -o :output -- :input"
 ENCODER_LOSSLESS_EXT="flac" # encoder's output extension without dot
 
 # wine and its flags

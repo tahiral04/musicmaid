@@ -1,93 +1,13 @@
 #!/bin/zsh
 
-help(){
-  cat <<EOF
-Usage:
-  $(basename $0) <from> <to> <file/dir> [<file/dir> ...]
+P_DIR="$HOME/Music/Playlists"
+P_DIR_IPOD="$P_DIR/ipod"
+P_DIR_ITUNES="$P_DIR/itunes"
 
-Options:
-  from      Source format
-  to        Target format
-  file/dir  One or more files or directories to process
-
-Supported formats: ipod, itunes
-EOF
-}
-
-convert_to_ipod() {
-  target_file="$1"
-
-  case "$MODE_FROM" in
-    itunes)
-      sed -i 's|Y:\\ipod|/music|g' "$target_file"
-      ;;
-  esac
-
-  sed -i '/^#/d' "$target_file"
-  sed -i 's|\\|/|g' "$target_file"
-}
-
-convert_to_itunes() {
-  target_file="$1"
-
-  case "$MODE_FROM" in
-    ipod)
-      sed -i 's|^/music|Y:\\ipod|g' "$target_file"
-      ;;
-  esac
-
-  sed -i '/^#/d' "$target_file"
-  sed -i 's#^/<HDD0>##' "$target_file"
-  sed -i 's|/|\\|g' "$target_file"
-}
-
-process_file() {
-  f="$1"
-
-  case "$MODE_TO" in
-    ipod)
-      extension="m3u8"
-      convert_to_ipod "$f"
-      ;;
-    itunes)
-      extension="m3u"
-      convert_to_itunes "$f"
-      ;;
-    *)
-      echo "[ERROR] Target format '$MODE_TO' not supported." >&2
-      exit 1
-      ;;
-  esac
-
-  mv "$f" "${f:r}.$extension"
-  echo "[OK] Processed: $f -> $MODE_TO"
-}
-
-########
-# MAIN #
-########
-
-if [ "$#" -lt 3 ]; then
-  help
-  exit 1
-fi
-
-MODE_FROM="$1"
-MODE_TO="$2"
-
-shift
-shift
-
-for item in "$@"; do
-  if [ -d "$item" ]; then
-    for file in "$item"/*(.); do
-      process_file "$file"
-    done
-  elif [ -f "$item" ]; then
-    process_file "$item"
-  else
-    echo "[WARNING] '$item' is not a valid file or directory. Skipping." >&2
-  fi
+for p in $P_DIR/*(.); do
+  print "Processing '$(basename "$p")'"
+  sed '/^#/d; s|^/music/master-lib|/music|; s|\.flac$|.m4a|' "$p" > "$P_DIR_IPOD/$(basename "$p")"
+  sed '/^#/d; s|^/music/master-lib|Y:\\ipod|; s|/|\\|g; s|\.flac$|.m4a|' "$p" > "$P_DIR_ITUNES/$(basename "$p")"
 done
 
-echo "Done."
+print "[DONE]"

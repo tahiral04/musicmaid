@@ -20,6 +20,13 @@ fi
 opts+=(-hide_banner -c copy)
 
 output="${file:r}.new.${file:e}"
+
+if [[ -e "$output" ]]; then
+  local n=1
+  while [[ -e "${file:r}.new${n}.${file:e}" ]]; do (( n++ )); done;
+  output="${file:r}.new${n}.${file:e}"
+fi
+
 echo "Converting: $file -> $output"
 ffmpeg -i "$file" "${opts[@]}" "$output"
 

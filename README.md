@@ -29,9 +29,9 @@ If converting to a new format with the encoders specified below, make sure to al
 
 **!! DO NOT WRITE QUOTES OR DOTS !!**
 
-_wrong_: `LIB_FORMAT_LOSSY=("mp3" .flac)`
+_wrong_: `LIB_FORMAT_LOSSY=("mp3" .ogg)`
 
-_right_: `LIB_FORMAT_LOSSY=(mp3 flac)`
+_right_: `LIB_FORMAT_LOSSY=(mp3 ogg)`
 
 ```bash
 LIB_FORMAT_LOSSY=(m4a mp3 opus)

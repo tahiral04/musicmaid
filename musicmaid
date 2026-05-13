@@ -48,8 +48,8 @@ write_musicmaid_env() {
 # to also add the new format's extension to the corresponding list below.
 
 # !! DO NOT WRITE QUOTES OR DOTS !!
-#   wrong: LIB_FORMAT_LOSSY=("mp3" .flac)
-#   right: LIB_FORMAT_LOSSY=(mp3 flac)
+#   wrong: LIB_FORMAT_LOSSY=("mp3" .ogg)
+#   right: LIB_FORMAT_LOSSY=(mp3 ogg)
 
 LIB_FORMAT_LOSSY=(m4a mp3 opus)
 LIB_FORMAT_LOSSLESS=(flac)
@@ -318,8 +318,9 @@ convert_lossy() {
   
   local target_path file file_list=$(mktemp /tmp/mm_lossy.XXXXXX)
   add_tmp_file "$file_list"
+  local ext_pattern="(wav|${(j:|:)LIB_FORMAT_LOSSLESS})"
 
-  for file in $SRC_DIR**/*.(#i)(wav|${(j:|:)LIB_FORMAT_LOSSLESS})(.); do
+  for file in $SRC_DIR**/*.(#i)${~ext_pattern}(.); do
     local lossy_found=0
     for ext in $LIB_FORMAT_LOSSLESS; do
       [[ -e ${file:r}.$ext || -e ${file:r}.${(U)ext} ]] && { lossy_found=1; break; }
@@ -419,7 +420,9 @@ _copy_lossless() {
 
 copy_files() {
   local file
-  for file in $SRC_DIR**/*.(#i)(${(j:|:)LIB_FORMAT_LOSSY}|${(j:|:)LIB_FORMAT_LOSSLESS})(.); do
+  local ext_pattern="(${(j:|:)LIB_FORMAT_LOSSY}|${(j:|:)LIB_FORMAT_LOSSLESS})"
+
+  for file in $SRC_DIR**/*.(#i)${~ext_pattern}(.); do
     (( CP_LOSSLESS )) && _copy_lossless "$file"
     if (( CP_LOSSY )) && [[ -e $file ]] && ! (( ${LIB_FORMAT_LOSSLESS[(Ie)${(L)${file:e}}]} )); then
       _copy_lossy "$file"
@@ -534,9 +537,9 @@ if [[ ! -f "$HOME/.config/musicmaid.env" ]]; then
   write_musicmaid_env "$HOME/.config/musicmaid.env"
   print_info "Created default encoders configuration at \"$HOME/.config/musicmaid.env\""
 fi
-set -a
+#set -a
 source "$HOME/.config/musicmaid.env"
-set +a
+#set +a
 validate_env
 
 (( RIP_CD )) && { rip_cd; (( !SILENT )) && print; }

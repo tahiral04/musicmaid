@@ -537,9 +537,7 @@ if [[ ! -f "$HOME/.config/musicmaid.env" ]]; then
   write_musicmaid_env "$HOME/.config/musicmaid.env"
   print_info "Created default encoders configuration at \"$HOME/.config/musicmaid.env\""
 fi
-#set -a
 source "$HOME/.config/musicmaid.env"
-#set +a
 validate_env
 
 (( RIP_CD )) && { rip_cd; (( !SILENT )) && print; }

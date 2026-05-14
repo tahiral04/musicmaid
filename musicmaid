@@ -276,8 +276,8 @@ convert_parallel() {
   parallel -0 -N2 -j"$THREAD_NUM" '
     output={1}
     input={2}
-    output_esc=$(printf '%q' "$output")
-    input_esc=$(printf '%q' "$input")
+    output_esc=$(printf "%q" "$output")
+    input_esc=$(printf "%q" "$input")
     opts="${enc_opts//:output/$output_esc}"
     opts="${opts//:input/$input_esc}"
     if [ "$is_lossy" -eq 1 ]; then
@@ -300,8 +300,8 @@ convert_xargs() {
   xargs -0 -a "$file_list" -n2 -P"$THREAD_NUM" sh -c '
     output={1}
     input={2}
-    output=$(printf '%q' "$output")
-    input=$(printf '%q' "$input")
+    output=$(printf "%q" "$output")
+    input=$(printf "%q" "$input")
     opts="${enc_opts//:output/$output}"
     opts="${opts//:input/$input}"
     if [ "$enc_use_wine" -eq 1 ]; then
@@ -322,11 +322,12 @@ convert_lossy() {
 
   for file in $SRC_DIR**/*.(#i)${~ext_pattern}(.); do
     local lossy_found=0
-    for ext in $LIB_FORMAT_LOSSLESS; do
+    for ext in $LIB_FORMAT_LOSSY; do
       [[ -e ${file:r}.$ext || -e ${file:r}.${(U)ext} ]] && { lossy_found=1; break; }
     done
-
     [[ -e ${file:r}.$ENCODER_LOSSY_EXT || $lossy_found -eq 1 ]] && continue
+
+    # do not convert file if it is in lossless format but the wav file exist, we want to convert the wav file
     (( ${LIB_FORMAT_LOSSLESS[(Ie)${(L)${file:e}}]} )) && [[ -e ${file:r}.wav || -e ${file:r}.WAV ]] && continue
 
     target_path=$(get_target_path "$file" "$LOSSY_DIR")
@@ -424,7 +425,7 @@ copy_files() {
 
   for file in $SRC_DIR**/*.(#i)${~ext_pattern}(.); do
     (( CP_LOSSLESS )) && _copy_lossless "$file"
-    if (( CP_LOSSY )) && [[ -e $file ]] && ! (( ${LIB_FORMAT_LOSSLESS[(Ie)${(L)${file:e}}]} )); then
+    if (( CP_LOSSY )) && (( ${LIB_FORMAT_LOSSY[(Ie)${(L)${file:e}}]} )); then
       _copy_lossy "$file"
     fi
   done

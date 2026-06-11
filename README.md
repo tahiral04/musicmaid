@@ -68,12 +68,9 @@ ENCODER_WINE="WINEDEBUG=-all wine"
 - `-v, --keep-va` -- Don't rename "_Various Artists_" folder to "_Compilations_"
 - `-c, --cover` -- Process cover images in the _source_ directory
 - `-e, --env` -- Output default encoders configuration to _~/.config/musicmaid.env_
-- `-s, --silent` -- Suppress non-error output. Also uses _xargs_ instead of _GNU Parallel_ for parallel processing
 - `-h, --help` -- Show help message
 
 **Dependencies:** GNU Parallel, abcde, ImageMagick
-
-**NOTE:** _xargs_ will be used instead of _GNU Parallel_ if the dependency is not found!
 
 ## playlist-adaptor
 

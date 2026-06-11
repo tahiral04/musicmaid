@@ -28,9 +28,7 @@ COVER_PROCESS=0
 COVER_CONVERT_QUALITY=85
 COVER_CROP=(-gravity center -crop 1:1 +repage)
 COVER_DIM="1500x1500"
-COVER_DIM_THUMB="200x200"
-SILENT=0
-USE_XARGS=0
+COVER_DIM_THUMB="100x100"
 
 # --- GLOBAL VARIABLES ---
 typeset _MKDIR_LAST_CREATED="" SRC_DIR="" LOSSY_DIR="" LOSSLESS_DIR="" TMP_FILES=$(mktemp /tmp/mm_tmp_files.XXXXXX)
@@ -108,8 +106,6 @@ Options:
   -r, --rip               Rip CD into "source/$RIP_CD_FOLDER" before operations
   -m, --rip-multi         Rip multiple CDs into "source/$RIP_CD_FOLDER" before
                           operations
-  -s, --silent            Suppress non-error output. Also uses xargs instead of
-                          GNU Parallel for parallel processing
   -e, --env               Output default encoders configuration to
                           ~/.config/musicmaid.env and exit
   -h, --help              Show this help message and exit
@@ -130,8 +126,8 @@ _print_color() {
   print
 }
 
-print_success() { (( !SILENT )) && _print_color "$COLOR_SUCCESS" "[OKI]" "$@"; }
-print_info() { (( !SILENT )) && _print_color "$COLOR_INFO" "[INF]" "$@"; }
+print_success() { _print_color "$COLOR_SUCCESS" "[OKI]" "$@"; }
+print_info() { _print_color "$COLOR_INFO" "[INF]" "$@"; }
 print_error() { { _print_color "$COLOR_ERROR" "[ERR]" "$@"; } >&2; }
 
 add_tmp_file() { print "$1" >> "$TMP_FILES"; }
@@ -142,10 +138,6 @@ _cleanup_tmp_files() { xargs -I{} sh -c 'rm -f "{}"' < "$TMP_FILES"; rm -f "$TMP
 mkdir_cache() { [[ $1 != $_MKDIR_LAST_CREATED ]] && { mkdir -p "$1"; _MKDIR_LAST_CREATED=$1; } }
 
 ask_mkdir() {
-  if (( SILENT )); then
-    print_error "Directory \"$1\" does not exist"
-    exit 1
-  fi
   print_info "Directory does not exist:" "$1"
   read -q "?Do you want to create it? [y/N] "
   local ans=$?
@@ -161,7 +153,7 @@ ask_mkdir() {
 parse_parameters() {
   (( $# == 0 )) && { print_error "Too few arguments. Use '-h' or '--help' to see how to use this script"; exit 1; }
 
-  local -a opt_help opt_lossy opt_lossless opt_cp_lossy opt_cp_lossless opt_rip opt_rip_multi opt_keep_va opt_cover opt_silent opt_env
+  local -a opt_help opt_lossy opt_lossless opt_cp_lossy opt_cp_lossless opt_rip opt_rip_multi opt_keep_va opt_cover opt_env
   zparseopts -D -F -- \
     h=opt_help        -help=opt_help \
     a=opt_lossy       -lossy=opt_lossy \
@@ -172,7 +164,6 @@ parse_parameters() {
     m=opt_rip_multi   -rip-multi=opt_rip_multi \
     v=opt_keep_va     -keep-va=opt_keep_va \
     c=opt_cover       -cover=opt_cover \
-    s=opt_silent      -silent=opt_silent \
     e=opt_env         -env=opt_env \
     2>/dev/null || { print_error "Unknown option: $1"; exit 1; }
 
@@ -185,7 +176,6 @@ parse_parameters() {
   (( ${#opt_rip_multi} )) && RIP_MULTI_CD=1
   (( ${#opt_keep_va} )) && KEEP_VA=1
   (( ${#opt_cover} )) && COVER_PROCESS=1
-  (( ${#opt_silent} )) && { SILENT=1; USE_XARGS=1; }
   if (( ${#opt_env} )); then
     write_musicmaid_env "$HOME/.config/musicmaid.env"
     print_info "Created default encoders configuration at \"$HOME/.config/musicmaid.env\""
@@ -293,28 +283,8 @@ convert_parallel() {
   ' < "$file_list"
 }
 
-# Usage: convert_xargs <file_list> <encoder> <encoder_options> <encoder_use_wine>
-convert_xargs() {
-  local file_list=$1
-  export enc=$2 enc_opts=$3 enc_use_wine=${4:-0}
-  xargs -0 -a "$file_list" -n2 -P"$THREAD_NUM" sh -c '
-    output={1}
-    input={2}
-    output=$(printf "%q" "$output")
-    input=$(printf "%q" "$input")
-    opts="${enc_opts//:output/$output}"
-    opts="${opts//:input/$input}"
-    if [ "$enc_use_wine" -eq 1 ]; then
-      eval "'"$ENCODER_WINE"' \"$enc\" $opts" >/dev/null
-    else
-      eval "\"$enc\" $opts" >/dev/null
-    fi
-  ' _
-}
-
 convert_lossy() {
-  ! check_dependency ENCODER_LOSSY && { print_info "Skipping LOSSY conversion due to missing dependencies"; return 1; }
-  ! check_dependency parallel && { print_info "GNU Parallel not found. Falling back to xargs..."; USE_XARGS=1; }
+  ! check_dependency ENCODER_LOSSY parallel && { print_info "Skipping LOSSY conversion due to missing dependencies"; return 1; }
   
   local target_path file file_list=$(mktemp /tmp/mm_lossy.XXXXXX)
   add_tmp_file "$file_list"
@@ -335,17 +305,11 @@ convert_lossy() {
     printf '%s\0%s\0' "$target_path" "$file" >> "$file_list"
   done
 
-
-  if (( USE_XARGS )); then
-    convert_xargs "$file_list" "$ENCODER_LOSSY" "$ENCODER_LOSSY_OPTIONS" "$ENCODER_LOSSY_USE_WINE"
-  else
-    convert_parallel "$file_list" "$ENCODER_LOSSY" "$ENCODER_LOSSY_OPTIONS" "$ENCODER_LOSSY_USE_WINE" "1"
-  fi
+  convert_parallel "$file_list" "$ENCODER_LOSSY" "$ENCODER_LOSSY_OPTIONS" "$ENCODER_LOSSY_USE_WINE" "1"
 }
 
 convert_lossless() {
-  ! check_dependency ENCODER_LOSSLESS && { print_info "Skipping LOSSLESS conversion due to missing dependencies"; return 1; }
-  ! check_dependency parallel && { print_info "GNU Parallel not found. Falling back to xargs..."; USE_XARGS=1; }
+  ! check_dependency ENCODER_LOSSLESS parallel && { print_info "Skipping LOSSLESS conversion due to missing dependencies"; return 1; }
 
   local target_path file file_list=$(mktemp /tmp/mm_lossless.XXXXXX)
   add_tmp_file "$file_list"
@@ -363,11 +327,7 @@ convert_lossless() {
     printf '%s\0%s\0' "${target_path}${file:t:r}.${ENCODER_LOSSLESS_EXT}" "$file" >> "$file_list"
   done
 
-  if (( USE_XARGS )); then
-    convert_xargs "$file_list" "$ENCODER_LOSSLESS" "$ENCODER_LOSSLESS_OPTIONS" "$ENCODER_LOSSLESS_USE_WINE"
-  else
-    convert_parallel "$file_list" "$ENCODER_LOSSLESS" "$ENCODER_LOSSLESS_OPTIONS" "$ENCODER_LOSSLESS_USE_WINE"
-  fi
+  convert_parallel "$file_list" "$ENCODER_LOSSLESS" "$ENCODER_LOSSLESS_OPTIONS" "$ENCODER_LOSSLESS_USE_WINE"
 }
 
 _copy_lossy() {
@@ -487,13 +447,9 @@ ONETRACKOUTPUTFORMAT='${ARTISTFILE}/${ALBUMFILE}/${TRACKNUM} ${TRACKFILE}'
 VAONETRACKOUTPUTFORMAT='Various Artists/${ALBUMFILE}/${TRACKNUM} ${TRACKFILE}'
 PADTRACKS=y
 mungefilename () { echo "$@" | sed -e 's/^\.*//' | tr -d ":><|*/\"'?[:cntrl:]"; }
+EXTRAVERBOSE=1
 EOF
   print "OUTPUTDIR=\"${SRC_DIR}${RIP_CD_FOLDER}\"" >> "$1"
-  if (( SILENT )); then
-    print "EXTRAVERBOSE=0" >> "$1"
-  else
-    print "EXTRAVERBOSE=1" >> "$1"
-  fi
 }
 
 cover_processor() {
@@ -541,8 +497,8 @@ fi
 source "$HOME/.config/musicmaid.env"
 validate_env
 
-(( RIP_CD )) && { rip_cd; (( !SILENT )) && print; }
-(( RIP_MULTI_CD )) && { rip_multi_cd; (( !SILENT )) && print; }
+(( RIP_CD )) && { rip_cd; print; }
+(( RIP_MULTI_CD )) && { rip_multi_cd; print; }
 
 (( CONV_LOSSY || CONV_LOSSLESS || CP_LOSSY || CP_LOSSLESS || COVER_PROCESS )) && print_info "Scanning directory..."
 
@@ -550,8 +506,8 @@ validate_env
 (( CONV_LOSSLESS )) && convert_lossless &
 wait
 
-(( CP_LOSSY || CP_LOSSLESS )) && { copy_files; (( !SILENT )) && print; }
-(( COVER_PROCESS )) && { cover_processor; (( !SILENT )) && print; }
+(( CP_LOSSY || CP_LOSSLESS )) && { copy_files; print; }
+(( COVER_PROCESS )) && { cover_processor; print; }
 
 print_success "All done!"
 exit 0

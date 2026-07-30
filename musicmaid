@@ -286,7 +286,7 @@ convert_parallel() {
 convert_lossy() {
   ! check_dependency ENCODER_LOSSY parallel && { print_info "Skipping LOSSY conversion due to missing dependencies"; return 1; }
   
-  local target_path file file_list=$(mktemp /tmp/mm_lossy.XXXXXX)
+  local target_path file_list=$(mktemp /tmp/mm_lossy.XXXXXX)
   add_tmp_file "$file_list"
   local ext_pattern="(wav|${(j:|:)LIB_FORMAT_LOSSLESS})"
 
@@ -311,7 +311,7 @@ convert_lossy() {
 convert_lossless() {
   ! check_dependency ENCODER_LOSSLESS parallel && { print_info "Skipping LOSSLESS conversion due to missing dependencies"; return 1; }
 
-  local target_path file file_list=$(mktemp /tmp/mm_lossless.XXXXXX)
+  local target_path file_list=$(mktemp /tmp/mm_lossless.XXXXXX)
   add_tmp_file "$file_list"
 
   for file in $SRC_DIR**/*.(#i)wav(.); do
@@ -380,7 +380,6 @@ _copy_lossless() {
 }
 
 copy_files() {
-  local file
   local ext_pattern="(${(j:|:)LIB_FORMAT_LOSSY}|${(j:|:)LIB_FORMAT_LOSSLESS})"
 
   for file in $SRC_DIR**/*.(#i)${~ext_pattern}(.); do
@@ -457,7 +456,6 @@ cover_processor() {
   local tmp_image=$(mktemp /tmp/mm_cover.XXXXXX.jpg)
   add_tmp_file "$tmp_image"
 
-  local file
   for file in $SRC_DIR**/*(#i)cover.(png|jpg|jpeg|webp)(.); do
     if [[ ! -e ${file:r}_thumb.jpg ]]; then
       print_info "Creating thumbnail" "\"${file:r}_thumb.jpg\""
@@ -500,6 +498,8 @@ validate_env
 (( RIP_CD )) && { rip_cd; print; }
 (( RIP_MULTI_CD )) && { rip_multi_cd; print; }
 
+(( COVER_PROCESS )) && { cover_processor; print; }
+
 (( CONV_LOSSY || CONV_LOSSLESS || CP_LOSSY || CP_LOSSLESS || COVER_PROCESS )) && print_info "Scanning directory..."
 
 (( CONV_LOSSY )) && convert_lossy &
@@ -507,7 +507,6 @@ validate_env
 wait
 
 (( CP_LOSSY || CP_LOSSLESS )) && { copy_files; print; }
-(( COVER_PROCESS )) && { cover_processor; print; }
 
 print_success "All done!"
 exit 0

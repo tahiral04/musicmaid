@@ -15,7 +15,6 @@ _musicmaid() {
     '(-r --rip -m --rip-multi)'{-m,--rip-multi}'[Rip multiple CDs]' \
     '(-v --keep-va)'{-v,--keep-va}'[Prevent renaming "Various Artists" to "Compilations"]' \
     '(-e --env)'{-e,--env}'[Output default encoders configuration to ~/.config/musicmaid.env]' \
-    '(-s --silent)'{-s,--silent}'[Suppress non-error output]' \
     ':source directory:_files -/' \
     '::lossy directory:_files -/' \
     '::lossless directory:_files -/'

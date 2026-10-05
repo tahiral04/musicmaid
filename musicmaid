@@ -29,9 +29,11 @@ COVER_CONVERT_QUALITY=85
 COVER_CROP=(-gravity center -crop 1:1 +repage)
 COVER_DIM="1500x1500"
 COVER_DIM_THUMB="100x100"
+COVER_DIM_ANIMATED="700" # width in pixels
 
 # --- GLOBAL VARIABLES ---
 typeset _MKDIR_LAST_CREATED="" SRC_DIR="" LOSSY_DIR="" LOSSLESS_DIR="" TMP_FILES=$(mktemp /tmp/mm_tmp_files.XXXXXX)
+
 
 # ===================
 # ===  FUNCTIONS  ===
@@ -102,7 +104,8 @@ Options:
   -A, --cp-lossy          Do copy or move files to lossy-dir
   -F, --cp-lossless       Don't copy or move files to lossless-dir
   -v, --keep-va           Don't rename "Various Artists" to "Compilations"
-  -c, --cover             Process cover images (resize, convert, compress)
+  -c, --cover             Process cover images (resize, convert, compress).
+                          Also converts mp4 videos to webp animated images.
   -r, --rip               Rip CD into "source/$RIP_CD_FOLDER" before operations
   -m, --rip-multi         Rip multiple CDs into "source/$RIP_CD_FOLDER" before
                           operations
@@ -114,6 +117,7 @@ Dependencies:
   GNU Parallel   Parallel file conversion
   abcde          CD ripper
   ImageMagick    Cover image processing
+  ffmpeg         Animated cover image processing
 EOF
 }
 
@@ -204,11 +208,6 @@ parse_parameters() {
 
   [[ $SRC_DIR == $LOSSY_DIR ]] && CP_LOSSY=0
   [[ $SRC_DIR == $LOSSLESS_DIR ]] && CP_LOSSLESS=0
-
-  if (( CONV_LOSSY && CONV_LOSSLESS )); then
-    THREAD_NUM=$(( THREAD_NUM / 2 ))
-    (( THREAD_NUM < 1 )) && THREAD_NUM=1
-  fi
 }
 
 # Checks if a command is available. Returns 1 if at least one is missing, 0 otherwise.
@@ -261,8 +260,10 @@ get_target_path() {
 # Usage: convert_parallel <file_list> <encoder> <encoder_options> <encoder_use_wine> <is_lossy>
 convert_parallel() {
   local file_list=$1
+  
   export enc=$2 enc_opts=$3 enc_use_wine=${4:-0} is_lossy=${5:-0}
   export COLOR_INFO COLOR_RESET
+
   parallel -0 -N2 -j"$THREAD_NUM" '
     output={1}
     input={2}
@@ -451,12 +452,41 @@ EOF
   print "OUTPUTDIR=\"${SRC_DIR}${RIP_CD_FOLDER}\"" >> "$1"
 }
 
+animated_cover_processor() {
+  ! check_dependency ffmpeg parallel && { print_info "Skipping animated cover processing due to missing dependencies"; return 1; }
+
+  local -a files=( $SRC_DIR**/(#i)cover*.mp4(.) )
+  (( ${#files} )) || return 0
+
+  local -x VF="libplacebo=w='min(${COVER_DIM_ANIMATED},iw)':h='min(${COVER_DIM_ANIMATED},ih)':force_original_aspect_ratio=decrease:downscaler=lanczos:extra_opts=preset=high_quality"
+  export TMP_FILES COLOR_INFO COLOR_ERROR COLOR_RESET
+
+  local job='
+    file={}
+    tmp=$(mktemp /tmp/mm_cover.XXXXXX.webp)
+    print -r -- "$tmp" >> "$TMP_FILES"
+    printf "%b" "${COLOR_INFO}[INF]${COLOR_RESET} Converted animated cover \"$file\"\n"
+    if ffmpeg -nostdin -hide_banner -loglevel error -y -hwaccel vaapi -i "$file" -an \
+         -vf "$VF" -vcodec libwebp_anim -lossless 0 -compression_level 6 \
+         -quality 91 -loop 0 "$tmp"; then
+      cp "$tmp" "${file:r}.webp"
+    else
+      printf "%b" "${COLOR_ERROR}[ERR]${COLOR_RESET} Failed to convert \"$file\"\n" >&2
+    fi
+  '
+
+  parallel -j"$THREAD_NUM" "$job" ::: $files
+}
+
 cover_processor() {
   ! check_dependency magick && { print_info "Skipping cover processing due to missing dependencies"; return 1; }
   local tmp_image=$(mktemp /tmp/mm_cover.XXXXXX.jpg)
   add_tmp_file "$tmp_image"
 
-  for file in $SRC_DIR**/*(#i)cover.(png|jpg|jpeg|webp)(.); do
+  for file in $SRC_DIR**/(#i)cover*.(png|jpg|jpeg|webp)(.); do
+    [[ ${(L)${file:t:r}} == *_thumb ]] && continue
+    [[ ${(L)${file:e}} == webp ]] && [[ -e ${file:r}.mp4 ]] && continue
+
     if [[ ! -e ${file:r}_thumb.jpg ]]; then
       print_info "Creating thumbnail" "\"${file:r}_thumb.jpg\""
       magick "$file" "${COVER_CROP[@]}" -thumbnail "${COVER_DIM_THUMB}>" "$tmp_image"
@@ -481,6 +511,7 @@ cover_processor() {
   done
 }
 
+
 # ==============
 # ===  MAIN  ===
 # ==============
@@ -498,9 +529,15 @@ validate_env
 (( RIP_CD )) && { rip_cd; print; }
 (( RIP_MULTI_CD )) && { rip_multi_cd; print; }
 
-(( COVER_PROCESS )) && { cover_processor; print; }
-
 (( CONV_LOSSY || CONV_LOSSLESS || CP_LOSSY || CP_LOSSLESS || COVER_PROCESS )) && print_info "Scanning directory..."
+
+(( COVER_PROCESS )) && cover_processor
+(( COVER_PROCESS )) && animated_cover_processor
+
+if (( CONV_LOSSY && CONV_LOSSLESS )); then
+  THREAD_NUM=$(( THREAD_NUM / 2 ))
+  (( THREAD_NUM < 1 )) && THREAD_NUM=1
+fi
 
 (( CONV_LOSSY )) && convert_lossy &
 (( CONV_LOSSLESS )) && convert_lossless &

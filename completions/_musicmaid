@@ -6,10 +6,10 @@ _musicmaid() {
 
   _arguments -C \
     '(- *)'{-h,--help}'[Show help message and exit]' \
-    '(-a --lossy)'{-a,--lossy}'[Do LOSSY conversions]' \
-    '(-f --lossless)'{-f,--lossless}'[Skip LOSSLESS conversions]' \
-    '(-A --cp-lossy)'{-A,--cp-lossy}'[Do copy or move files to lossy-dir]' \
-    '(-F --cp-lossless)'{-F,--cp-lossless}'[Do not copy or move files to lossless-dir]' \
+    '(-a --lossy)'{-a,--lossy}'[LOSSY conversions]' \
+    '(-f --lossless)'{-f,--lossless}'[LOSSLESS conversions]' \
+    '(-A --cp-lossy)'{-A,--cp-lossy}'[Copy or move files to lossy-dir]' \
+    '(-F --cp-lossless)'{-F,--cp-lossless}'[Copy or move files to lossless-dir]' \
     '(-c --cover)'{-c,--cover}'[Process cover images]' \
     '(-r --rip -m --rip-multi)'{-r,--rip}'[Rip CD]' \
     '(-r --rip -m --rip-multi)'{-m,--rip-multi}'[Rip multiple CDs]' \

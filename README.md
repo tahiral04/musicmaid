@@ -59,10 +59,10 @@ ENCODER_WINE="WINEDEBUG=-all wine"
 
 ### Options
 
-- `-a, --lossy` -- Do LOSSY conversions
-- `-f, --lossless` -- Skip LOSSLESS conversions
-- `-A, --cp-lossy` -- Do copy or move files to _lossy-dir_
-- `-F, --cp-lossless` -- Don't copy or move files to _lossless-dir_
+- `-a, --lossy` -- LOSSY conversions
+- `-f, --lossless` -- LOSSLESS conversions
+- `-A, --cp-lossy` -- Copy or move files to _lossy-dir_
+- `-F, --cp-lossless` -- Copy or move files to _lossless-dir_
 - `-r, --rip` -- Rip CD into "_source/mm_cd_rip_" before operations
 - `-m, --rip-multi` -- Rip multiple CDs into "_source/mm_cd_rip_" before operations
 - `-v, --keep-va` -- Don't rename "_Various Artists_" folder to "_Compilations_"
@@ -70,25 +70,17 @@ ENCODER_WINE="WINEDEBUG=-all wine"
 - `-e, --env` -- Output default encoders configuration to _~/.config/musicmaid.env_
 - `-h, --help` -- Show help message
 
-**Dependencies:** GNU Parallel, abcde, ImageMagick
+**Dependencies:** GNU Parallel, abcde, ImageMagick, ffmpeg
 
 ## playlist-adaptor
 
-Adapts playlists created by iTunes for RockBox compatibility and viceversa.
+Adapts playlists created by Navidrome for usage in iTunes and RockBox.
 
-**Usage:** `playlist-adaptor <from> <to> <file>`
-
-**Options:**
-
-- `from` -- The type of playlist to convert from
-- `to` -- The type of playlist to convert to
-- `file` -- Path to a playlist file or a directory containing playlist files
-
-**Valid types:**  `ipod`  `itunes`
+**Usage:** `playlist-adaptor`
 
 ## ipodsync
 
-Syncs the music library with the iPod and generates the updated Rockbox database.
+Syncs the music library with the iPod.
 
 **Usage:** `ipodsync`
 

@@ -17,15 +17,15 @@ COLOR_ERROR='\033[31m'   # red
 # --- OPTIONS ---
 THREAD_NUM=$(getconf _NPROCESSORS_ONLN 2>/dev/null || print 1)
 CONV_LOSSY=0
-CONV_LOSSLESS=1
+CONV_LOSSLESS=0
 CP_LOSSY=0
-CP_LOSSLESS=1
+CP_LOSSLESS=0
 RIP_CD=0
 RIP_MULTI_CD=0
 RIP_CD_FOLDER="mm_cd_rip"
 KEEP_VA=0
 COVER_PROCESS=0
-COVER_CONVERT_QUALITY=85
+COVER_CONVERT_QUALITY=90
 COVER_CROP=(-gravity center -crop 1:1 +repage)
 COVER_DIM="1500x1500"
 COVER_DIM_THUMB="100x100"
@@ -99,10 +99,10 @@ Arguments:
   lossless-dir   Destination directory for LOSSLESS files (defaults to source)
 
 Options:
-  -a, --lossy             Do LOSSY conversions
-  -f, --lossless          Skip LOSSLESS conversions
-  -A, --cp-lossy          Do copy or move files to lossy-dir
-  -F, --cp-lossless       Don't copy or move files to lossless-dir
+  -a, --lossy             LOSSY conversions
+  -f, --lossless          LOSSLESS conversions
+  -A, --cp-lossy          Copy or move files to lossy-dir
+  -F, --cp-lossless       Copy or move files to lossless-dir
   -v, --keep-va           Don't rename "Various Artists" to "Compilations"
   -c, --cover             Process cover images (resize, convert, compress).
                           Also converts mp4 videos to webp animated images.
@@ -173,9 +173,9 @@ parse_parameters() {
 
   (( ${#opt_help} )) && { print_help; exit 0; }
   (( ${#opt_lossy} )) && CONV_LOSSY=1
-  (( ${#opt_lossless} )) && CONV_LOSSLESS=0
+  (( ${#opt_lossless} )) && CONV_LOSSLESS=1
   (( ${#opt_cp_lossy} )) && CP_LOSSY=1
-  (( ${#opt_cp_lossless} )) && CP_LOSSLESS=0
+  (( ${#opt_cp_lossless} )) && CP_LOSSLESS=1
   (( ${#opt_rip} )) && RIP_CD=1
   (( ${#opt_rip_multi} )) && RIP_MULTI_CD=1
   (( ${#opt_keep_va} )) && KEEP_VA=1
@@ -264,7 +264,7 @@ convert_parallel() {
   export enc=$2 enc_opts=$3 enc_use_wine=${4:-0} is_lossy=${5:-0}
   export COLOR_INFO COLOR_RESET
 
-  parallel -0 -N2 -j"$THREAD_NUM" '
+  parallel --line-buffer -0 -N2 -j"$THREAD_NUM" '
     output={1}
     input={2}
     output_esc=$(printf "%q" "$output")
@@ -272,9 +272,9 @@ convert_parallel() {
     opts="${enc_opts//:output/$output_esc}"
     opts="${opts//:input/$input_esc}"
     if [ "$is_lossy" -eq 1 ]; then
-      printf "%b" "${COLOR_INFO}[CNV]${COLOR_RESET} Lossy: \"$input\"\n"
+      printf "%b" "${COLOR_INFO}[CNV]${COLOR_RESET} Converting lossy: \"$input\"\n"
     else
-      printf "%b" "${COLOR_INFO}[CNV]${COLOR_RESET} Lossless: \"$input\"\n"
+      printf "%b" "${COLOR_INFO}[CNV]${COLOR_RESET} Converting lossless: \"$input\"\n"
     fi
     if [ "$enc_use_wine" -eq 1 ]; then
       eval "'"$ENCODER_WINE"' \"$enc\" $opts"
@@ -452,32 +452,6 @@ EOF
   print "OUTPUTDIR=\"${SRC_DIR}${RIP_CD_FOLDER}\"" >> "$1"
 }
 
-animated_cover_processor() {
-  ! check_dependency ffmpeg parallel && { print_info "Skipping animated cover processing due to missing dependencies"; return 1; }
-
-  local -a files=( $SRC_DIR**/(#i)cover*.mp4(.) )
-  (( ${#files} )) || return 0
-
-  local -x VF="libplacebo=w='min(${COVER_DIM_ANIMATED},iw)':h='min(${COVER_DIM_ANIMATED},ih)':force_original_aspect_ratio=decrease:downscaler=lanczos:extra_opts=preset=high_quality"
-  export TMP_FILES COLOR_INFO COLOR_ERROR COLOR_RESET
-
-  local job='
-    file={}
-    tmp=$(mktemp /tmp/mm_cover.XXXXXX.webp)
-    print -r -- "$tmp" >> "$TMP_FILES"
-    printf "%b" "${COLOR_INFO}[INF]${COLOR_RESET} Converted animated cover \"$file\"\n"
-    if ffmpeg -nostdin -hide_banner -loglevel error -y -hwaccel vaapi -i "$file" -an \
-         -vf "$VF" -vcodec libwebp_anim -lossless 0 -compression_level 6 \
-         -quality 91 -loop 0 "$tmp"; then
-      cp "$tmp" "${file:r}.webp"
-    else
-      printf "%b" "${COLOR_ERROR}[ERR]${COLOR_RESET} Failed to convert \"$file\"\n" >&2
-    fi
-  '
-
-  parallel -j"$THREAD_NUM" "$job" ::: $files
-}
-
 cover_processor() {
   ! check_dependency magick && { print_info "Skipping cover processing due to missing dependencies"; return 1; }
   local tmp_image=$(mktemp /tmp/mm_cover.XXXXXX.jpg)
@@ -509,6 +483,32 @@ cover_processor() {
         ;;
     esac
   done
+}
+
+animated_cover_processor() {
+  ! check_dependency ffmpeg parallel && { print_info "Skipping animated cover processing due to missing dependencies"; return 1; }
+
+  local -a files=( $SRC_DIR**/(#i)cover*.mp4(.) )
+  (( ${#files} )) || return 0
+
+  local -x VF="libplacebo=extra_opts=preset=high_quality:w='min(${COVER_DIM_ANIMATED},iw)':h='min(${COVER_DIM_ANIMATED},ih)':force_original_aspect_ratio=decrease:downscaler=lanczos:fps=15,format=bgra"
+  export TMP_FILES COLOR_INFO COLOR_ERROR COLOR_RESET
+
+  local job='
+    file={}
+    tmp=$(mktemp /tmp/mm_cover.XXXXXX.webp)
+    print -r -- "$tmp" >> "$TMP_FILES"
+    printf "%b" "${COLOR_INFO}[INF]${COLOR_RESET} Converting animated cover \"$file\"\n"
+    if ffmpeg -nostdin -hide_banner -loglevel error -y -hwaccel vaapi -i "$file" -an \
+         -vf "$VF" -vcodec libwebp_anim -lossless 0 -compression_level 6 \
+         -quality 92 -loop 0 "$tmp"; then
+      cp "$tmp" "${file:r}.webp"
+    else
+      printf "%b" "${COLOR_ERROR}[ERR]${COLOR_RESET} Failed to convert animated cover \"$file\"\n" >&2
+    fi
+  '
+
+  parallel --unsafe --line-buffer -j"$THREAD_NUM" "$job" ::: $files
 }
 
 
